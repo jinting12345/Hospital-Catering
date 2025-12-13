@@ -3,141 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>便當拍照上傳</title>
+    <title>便當上傳</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; max-width: 600px; margin: 0 auto; text-align: center; }
-        .back-link { display: inline-block; margin-bottom: 20px; color: #666; text-decoration: none; font-size: 14px; }
-        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        .meal-btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; background-color: #e0e0e0; transition: 0.2s; }
-        .meal-btn.active { background-color: #28a745; color: white; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; background: #f8f9fa; max-width: 600px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .back-btn { text-decoration: none; color: #666; font-size: 14px; display: flex; align-items: center; }
+        .logout-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         
-        .upload-section { display: none; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .camera-btn { background: #007bff; color: white; padding: 12px 24px; border-radius: 30px; border: none; font-size: 18px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin: 15px 0; }
+        .section { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h3 { margin: 0 0 10px 0; font-size: 16px; color: #333; }
+        
+        input[type="date"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; text-align: center; font-size: 16px; }
+        
+        .btn-group { display: flex; gap: 10px; }
+        .toggle-btn { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; background: white; transition: 0.2s; }
+        .toggle-btn.active { background: #1a73e8; color: white; border-color: #1a73e8; font-weight: bold; }
+        
+        .upload-area { display: none; margin-top: 15px; text-align: center; }
+        .camera-btn { background: #28a745; color: white; padding: 12px 24px; border-radius: 30px; border: none; font-size: 18px; cursor: pointer; margin: 15px 0; }
         #preview { width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin-top: 10px; display: none; }
-        .submit-btn { width: 100%; padding: 14px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 15px; display: none; }
-        .submit-btn:disabled { background: #ccc; }
-        #status { margin-top: 15px; font-weight: bold; min-height: 24px; }
+        #status { margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <a href="menu.html" class="back-link">⬅️ 返回選單</a>
-    <h2>🍱 今日便當上傳</h2>
-
-    <div class="btn-group">
-        <button class="meal-btn" onclick="selectMeal(this, 'breakfast')">早餐</button>
-        <button class="meal-btn" onclick="selectMeal(this, 'lunch')">午餐</button>
-        <button class="meal-btn" onclick="selectMeal(this, 'dinner')">晚餐</button>
+    <div class="header">
+        <a href="menu.html" class="back-btn">⬅ 回選單</a>
+        <button onclick="handleLogout()" class="logout-btn">登出</button>
     </div>
 
-    <div id="uploadSection" class="upload-section">
-        <p>已選擇：<span id="mealLabel" style="color:#28a745; font-weight:bold;"></span></p>
-        
-        <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="processImage()">
-        <button class="camera-btn" onclick="document.getElementById('fileInput').click()">📷 啟動相機</button>
-        
-        <img id="preview">
-        <div id="status"></div>
-        <button id="submitBtn" class="submit-btn" onclick="uploadData()">🚀 確認上傳</button>
+    <!-- 1. 日期 -->
+    <div class="section">
+        <h3>📅 上傳日期</h3>
+        <input type="date" id="dateInput">
+    </div>
+
+    <!-- 2. 對象 -->
+    <div class="section">
+        <h3>👥 供餐對象</h3>
+        <div class="btn-group" id="targetGroup">
+            <button class="toggle-btn" onclick="selectTarget('nursing')">🏠 護家餐</button>
+            <button class="toggle-btn" onclick="selectTarget('patient')">🏥 病患餐</button>
+        </div>
+    </div>
+
+    <!-- 3. 餐別 (選完對象顯示) -->
+    <div class="section" id="mealSection" style="display:none;">
+        <h3>🍽️ 餐別</h3>
+        <div class="btn-group" id="mealGroup">
+            <button class="toggle-btn" onclick="selectMeal('breakfast')">早餐</button>
+            <button class="toggle-btn" onclick="selectMeal('lunch')">午餐</button>
+            <button class="toggle-btn" onclick="selectMeal('dinner')">晚餐</button>
+        </div>
+
+        <!-- 4. 拍照 -->
+        <div class="upload-area" id="uploadArea">
+            <hr style="border-top:1px solid #eee; margin: 20px 0;">
+            <p>即將上傳：<span id="summary" style="color:#1a73e8; font-weight:bold;"></span></p>
+            
+            <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="processImage()">
+            <button class="camera-btn" onclick="document.getElementById('fileInput').click()">📸 啟動相機 / 選照片</button>
+            
+            <img id="preview">
+            <div id="status"></div>
+            <button id="submitBtn" onclick="uploadData()" style="width:100%; padding:12px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:16px; margin-top:15px; display:none;">確認上傳</button>
+        </div>
     </div>
 
     <script>
-        // ★★★ 請替換這裡 ★★★
-        const SUPABASE_URL = '你的_URL';
-        const SUPABASE_KEY = '你的_sb_publishable_KEY';
+        function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+        // ★★★ 請替換 ★★★
+        const RAW_URL = '你的_URL';
+        const RAW_KEY = '你的_KEY';
+        const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        let currentMeal = '';
-        let compressedFile = null;
-        let currentUserEmail = '';
+        let curTarget = '', curMeal = '', compressedFile = null;
 
-        // 1. 檢查權限
-        async function init() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = 'index.html';
-            } else {
-                currentUserEmail = session.user.email;
-            }
-        }
-        init();
+        // 初始化
+        (async () => {
+            const { data } = await supabase.auth.getSession();
+            if(!data.session) window.location.href = 'index.html';
+            document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+        })();
 
-        // 2. 選擇餐別
-        function selectMeal(btn, type) {
-            document.querySelectorAll('.meal-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentMeal = type;
-            document.getElementById('mealLabel').innerText = (type==='breakfast'?'早餐':type==='lunch'?'午餐':'晚餐');
-            document.getElementById('uploadSection').style.display = 'block';
-            resetForm();
+        async function handleLogout() { await supabase.auth.signOut(); window.location.href = 'index.html'; }
+
+        function selectTarget(type) {
+            curTarget = type;
+            updateUI('targetGroup', type);
+            document.getElementById('mealSection').style.display = 'block';
+            updateSummary();
         }
 
-        function resetForm() {
-            compressedFile = null;
-            document.getElementById('preview').style.display = 'none';
-            document.getElementById('submitBtn').style.display = 'none';
-            document.getElementById('status').innerText = '';
-            document.getElementById('fileInput').value = '';
+        function selectMeal(type) {
+            curMeal = type;
+            updateUI('mealGroup', type);
+            document.getElementById('uploadArea').style.display = 'block';
+            updateSummary();
         }
 
-        // 3. 壓縮圖片
+        function updateUI(groupId, activeType) {
+            const btns = document.getElementById(groupId).querySelectorAll('button');
+            btns.forEach(b => {
+                // 簡單判斷：看 onclick 內容是否包含 activeType
+                if(b.getAttribute('onclick').includes(activeType)) b.classList.add('active');
+                else b.classList.remove('active');
+            });
+        }
+
+        function updateSummary() {
+            const date = document.getElementById('dateInput').value;
+            const tName = curTarget==='nursing'?'護家':'病患';
+            const mName = curMeal==='breakfast'?'早餐':curMeal==='lunch'?'午餐':'晚餐';
+            document.getElementById('summary').innerText = `${date} / ${tName} / ${mName}`;
+        }
+
         async function processImage() {
             const file = document.getElementById('fileInput').files[0];
-            if (!file) return;
-
-            document.getElementById('status').innerText = '⏳ 處理圖片中...';
-            
+            if(!file) return;
+            document.getElementById('status').innerText = '處理中...';
             try {
-                // 壓縮到 300KB 以下
-                const options = { maxSizeMB: 0.3, maxWidthOrHeight: 1280, useWebWorker: true };
+                const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
                 compressedFile = await imageCompression(file, options);
-                
-                // 顯示預覽
                 document.getElementById('preview').src = URL.createObjectURL(compressedFile);
                 document.getElementById('preview').style.display = 'block';
                 document.getElementById('submitBtn').style.display = 'block';
                 document.getElementById('status').innerText = '';
-            } catch (err) {
-                alert('圖片處理失敗');
-            }
+            } catch(e) { alert('圖片處理失敗'); }
         }
 
-        // 4. 上傳資料
         async function uploadData() {
-            if (!compressedFile) return;
+            if(!compressedFile) return;
             const btn = document.getElementById('submitBtn');
-            btn.disabled = true;
-            btn.innerText = '上傳中...';
+            const date = document.getElementById('dateInput').value;
+            btn.disabled = true; btn.innerText = '上傳中...';
 
             try {
-                // 檔名：日期_餐別_亂數.jpg
-                const dateStr = new Date().toISOString().split('T')[0];
-                const fileName = `${dateStr}_${currentMeal}_${Date.now()}.jpg`;
+                // 檔名：日期_對象_餐別_亂數.jpg
+                const fileName = `${date}_${curTarget}_${curMeal}_${Date.now()}.jpg`;
+                
+                const { error: upErr } = await supabase.storage.from('photos').upload(fileName, compressedFile);
+                if(upErr) throw upErr;
 
-                // A. 上傳圖片到 Storage
-                const { error: uploadErr } = await supabase.storage.from('photos').upload(fileName, compressedFile);
-                if (uploadErr) throw uploadErr;
-
-                // B. 寫入資料庫
                 const { error: dbErr } = await supabase.from('meal_logs').insert([{
-                    meal_date: dateStr,
-                    meal_type: currentMeal,
+                    meal_date: date,
+                    meal_type: curMeal,
+                    target_type: curTarget,
                     image_path: fileName,
-                    uploader_email: currentUserEmail
+                    uploader_email: (await supabase.auth.getUser()).data.user.email
                 }]);
-                if (dbErr) throw dbErr;
+                if(dbErr) throw dbErr;
 
-                document.getElementById('status').innerHTML = '<span style="color:green">✅ 上傳成功！</span>';
-                setTimeout(() => { location.reload(); }, 2000);
-
-            } catch (err) {
-                console.error(err);
-                document.getElementById('status').innerText = '❌ 失敗: ' + err.message;
-                btn.disabled = false;
-                btn.innerText = '🚀 確認上傳';
+                document.getElementById('status').innerHTML = '<span style="color:green">✅ 上傳成功</span>';
+                setTimeout(() => location.reload(), 1500);
+            } catch(e) {
+                console.error(e);
+                document.getElementById('status').innerText = '❌ 失敗: ' + e.message;
+                btn.disabled = false; btn.innerText = '確認上傳';
             }
         }
     </script>
 </body>
-</html> 
+</html>
