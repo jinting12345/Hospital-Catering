@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>義大醫院營養科資訊系統 - 登入</title>
+    <title>義大營養科資訊系統 - 登入</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
@@ -17,7 +17,7 @@
 </head>
 <body>
     <div class="login-box">
-        <h2>🏥 營養科資訊系統</h2>
+        <h2>🏥 義大營養科資訊系統</h2>
         <input type="email" id="email" placeholder="帳號 (Email)">
         <input type="password" id="password" placeholder="密碼">
         <button onclick="handleLogin()" id="loginBtn">登入系統</button>
@@ -27,8 +27,8 @@
     <script>
         function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
         // ★★★ 請替換成你的 URL 和 KEY ★★★
-        const RAW_URL = '你的_URL';
-        const RAW_KEY = '你的_KEY';
+        const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
+        const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
         const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
         // ★★★ 修改重點：一開啟這個頁面，立刻強制登出 ★★★
@@ -67,3 +67,4 @@
     </script>
 </body>
 </html>
+
