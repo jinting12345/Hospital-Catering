@@ -3,65 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>功能選單</title>
+    <title>系統選單</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; max-width: 600px; margin: 0 auto; }
-        h2 { text-align: center; color: #333; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .card { background: white; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-decoration: none; color: #333; transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 120px; }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .icon { font-size: 40px; margin-bottom: 10px; }
-        .logout-btn { display: block; width: 100%; padding: 12px; background: #6c757d; color: white; border: none; border-radius: 8px; margin-top: 30px; cursor: pointer; font-size: 16px; }
+        body { font-family: sans-serif; background: #f8f9fa; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 0 10px; }
+        h2 { margin: 0; color: #333; }
+        .logout-btn { background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        
+        .container { max-width: 800px; margin: 0 auto; }
+        .group-title { color: #666; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin: 30px 0 15px 0; font-weight: bold; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .card { background: white; padding: 20px; border-radius: 8px; text-align: center; text-decoration: none; color: #333; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100px; }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); border: 1px solid #1a73e8; }
+        .icon { font-size: 32px; margin-bottom: 8px; }
+        .card.disabled { background: #eee; color: #999; cursor: not-allowed; pointer-events: none; }
     </style>
 </head>
 <body>
-    <h2>📋 科內作業選單</h2>
-    <p id="user-info" style="text-align:center; color:#666; font-size:0.9em;">載入中...</p>
-    
-    <div class="grid">
-        <a href="bento.html" class="card">
-            <span class="icon">🍱</span>
-            <span>便當拍照</span>
-        </a>
-        <a href="#" class="card" onclick="alert('功能開發中...')">
-            <span class="icon">🌡️</span>
-            <span>餐車溫度</span>
-        </a>
-        <a href="#" class="card" onclick="alert('功能開發中...')">
-            <span class="icon">🧮</span>
-            <span>熱量計算</span>
-        </a>
-        <a href="#" class="card" style="opacity:0.6; cursor:default;">
-            <span class="icon">➕</span>
-            <span>敬請期待</span>
-        </a>
+    <div class="container">
+        <div class="header">
+            <h2>🏥 營養科資訊系統</h2>
+            <button onclick="handleLogout()" class="logout-btn">登出</button>
+        </div>
+
+        <!-- 1. 膳管組 -->
+        <div class="group-title">🍱 膳管組</div>
+        <div class="grid">
+            <a href="upload_bento.html" class="card">
+                <span class="icon">📸</span>
+                <span>便當上傳</span>
+            </a>
+            <a href="check_records.html" class="card">
+                <span class="icon">📋</span>
+                <span>檢查紀錄 & 缺漏</span>
+            </a>
+            <a href="#" class="card" onclick="alert('開發中')">
+                <span class="icon">🌡️</span>
+                <span>餐車溫度</span>
+            </a>
+        </div>
+
+        <!-- 2. 臨床組 -->
+        <div class="group-title">🩺 臨床組</div>
+        <div class="grid">
+            <div class="card disabled">
+                <span class="icon">➕</span>
+                <span>敬請期待</span>
+            </div>
+        </div>
+
+        <!-- 3. 教研組 -->
+        <div class="group-title">🎓 教研組</div>
+        <div class="grid">
+            <div class="card disabled">
+                <span class="icon">➕</span>
+                <span>敬請期待</span>
+            </div>
+        </div>
+
+        <!-- 4. 共用區 -->
+        <div class="group-title">⚙️ 共用區</div>
+        <div class="grid">
+            <a href="upload_schedule.html" class="card">
+                <span class="icon">📅</span>
+                <span>班表上傳 (Excel)</span>
+            </a>
+        </div>
     </div>
 
-    <button onclick="handleLogout()" class="logout-btn">登出系統</button>
-
     <script>
-        // ★★★ 請替換這裡 ★★★
-        const SUPABASE_URL = '你的_URL';
-        const SUPABASE_KEY = '你的_sb_publishable_KEY';
-
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        // 安全守門員：沒登入就踢回首頁
-        async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = 'index.html';
-            } else {
-                document.getElementById('user-info').innerText = `目前使用者: ${session.user.email}`;
-            }
-        }
-        checkAuth();
+        function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+        // ★★★ 請替換 ★★★
+        const RAW_URL = '你的_URL';
+        const RAW_KEY = '你的_KEY';
+        const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
         async function handleLogout() {
             await supabase.auth.signOut();
             window.location.href = 'index.html';
         }
+        
+        // 登入檢查
+        (async () => {
+            const { data } = await supabase.auth.getSession();
+            if(!data.session) window.location.href = 'index.html';
+        })();
     </script>
 </body>
 </html>
