@@ -3,26 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>紀錄檢查</title>
+    <title>查看照片上傳紀錄</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f8f9fa; max-width: 800px; margin: 0 auto; }
+        body { font-family: "Microsoft JhengHei", sans-serif; padding: 20px; background: #f8f9fa; max-width: 1000px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
         .back-btn { text-decoration: none; color: #666; display: flex; align-items: center; }
         .logout-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         
+        /* 控制面板區 */
         .control-panel { background: white; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; flex-wrap: wrap; }
-        input[type="date"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        button.check-btn { padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        select, input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
+        button.check-btn { padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;}
+        button.check-btn:hover { background: #1557b0; }
+
+        /* 表格區 */
+        .table-container { background: white; border-radius: 8px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; } /* 確保手機上可橫向捲動 */
+        th, td { padding: 10px; text-align: center; border-bottom: 1px solid #eee; border-right: 1px solid #eee; }
+        th { background: #f1f3f4; color: #333; font-size: 14px; white-space: nowrap; }
+        td { font-size: 14px; }
         
-        .table-container { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f1f3f4; color: #555; font-size: 14px; }
-        .status-ok { color: green; font-weight: bold; }
-        .status-missing { color: red; font-weight: bold; }
+        /* 特定欄位樣式 */
+        .col-date { font-weight: bold; color: #1a73e8; white-space: nowrap; background: #fff; position: sticky; left: 0; z-index: 1; border-right: 2px solid #ddd; }
+        .col-staff { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; }
         
-        .mail-btn { padding: 4px 8px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; }
+        /* 狀態燈號 */
+        .ok { color: #28a745; font-size: 18px; } /* 綠勾 */
+        .missing { color: #dc3545; font-size: 12px; font-weight: bold; } /* 紅叉 */
+        
+        /* 週末高亮 */
+        tr.weekend { background-color: #fafafa; }
     </style>
 </head>
 <body>
@@ -32,101 +43,186 @@
     </div>
 
     <div class="control-panel">
-        <label>查詢日期：</label>
-        <input type="date" id="queryDate">
-        <button class="check-btn" onclick="checkStatus()">🔍 檢查缺漏</button>
+        <select id="viewMode" onchange="changeMode()">
+            <option value="day">📅 每日檢視</option>
+            <option value="week">📆 每週檢視</option>
+            <option value="month" selected>🗓️ 每月檢視</option>
+        </select>
+        
+        <div id="dateInputContainer">
+            <input type="month" id="monthInput">
+        </div>
+
+        <button class="check-btn" onclick="fetchData()">🔍 查詢</button>
     </div>
 
     <div class="table-container">
         <table>
             <thead>
                 <tr>
-                    <th>餐別</th>
-                    <th>類別</th>
-                    <th>狀態</th>
-                    <th>值班人 (班表)</th>
-                    <th>操作</th>
+                    <th rowspan="2" class="col-date" style="z-index:2">日期</th>
+                    <th rowspan="2">值班人</th>
+                    <th colspan="2">早餐</th>
+                    <th colspan="2">午餐</th>
+                    <th colspan="2">晚餐</th>
+                </tr>
+                <tr>
+                    <th>病患</th><th>護家</th>
+                    <th>病患</th><th>護家</th>
+                    <th>病患</th><th>護家</th>
                 </tr>
             </thead>
             <tbody id="resultBody">
-                <tr><td colspan="5" style="text-align:center;">請選擇日期並按下檢查</td></tr>
+                <tr><td colspan="8" style="padding: 20px;">請選擇日期並按下查詢</td></tr>
             </tbody>
         </table>
     </div>
 
     <script>
         function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
-        // ★★★ 請替換 ★★★
         const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
         const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
-        const TEST_EMAIL = 'ed114536@edah.org.tw'; // ★ 測試用信箱
-
         const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
+        // 初始化
         (async () => {
             const { data } = await supabase.auth.getSession();
             if(!data.session) window.location.href = 'index.html';
-            document.getElementById('queryDate').value = new Date().toISOString().split('T')[0];
+            
+            // 預設選取當前月份
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            document.getElementById('monthInput').value = `${yyyy}-${mm}`;
         })();
+
         async function handleLogout() { await supabase.auth.signOut(); window.location.href = 'index.html'; }
 
-        async function checkStatus() {
-            const date = document.getElementById('queryDate').value;
+        // 切換模式時改變輸入框
+        function changeMode() {
+            const mode = document.getElementById('viewMode').value;
+            const container = document.getElementById('dateInputContainer');
+            container.innerHTML = ''; // 清空
+
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+
+            if (mode === 'month') {
+                container.innerHTML = `<input type="month" id="monthInput" value="${yyyy}-${mm}">`;
+            } else {
+                // 週與日都用 date picker (週的話程式邏輯會自動抓該週週一~週日)
+                container.innerHTML = `<input type="date" id="dateInput" value="${yyyy}-${mm}-${dd}">`;
+            }
+        }
+
+        async function fetchData() {
+            const mode = document.getElementById('viewMode').value;
             const tbody = document.getElementById('resultBody');
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">查詢中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8">資料讀取中...</td></tr>';
 
-            // 1. 撈取當日所有上傳紀錄
-            const { data: logs } = await supabase.from('meal_logs').select('*').eq('meal_date', date);
-            
-            // 2. 撈取當日班表
-            const { data: roster } = await supabase.from('duty_roster').select('*').eq('date', date);
+            let startDate, endDate;
 
-            // 定義要檢查的項目 (3餐 x 2類別 = 6項)
-            const checklist = [
-                { meal: 'breakfast', type: 'patient', label: '早餐 (病患)' },
-                { meal: 'breakfast', type: 'nursing', label: '早餐 (護家)' },
-                { meal: 'lunch', type: 'patient', label: '午餐 (病患)' },
-                { meal: 'lunch', type: 'nursing', label: '午餐 (護家)' },
-                { meal: 'dinner', type: 'patient', label: '晚餐 (病患)' },
-                { meal: 'dinner', type: 'nursing', label: '晚餐 (護家)' }
-            ];
+            // 1. 計算日期範圍
+            if (mode === 'month') {
+                const val = document.getElementById('monthInput').value; // "2025-12"
+                if (!val) { alert('請選擇月份'); return; }
+                const [y, m] = val.split('-');
+                startDate = `${y}-${m}-01`;
+                // 取得該月最後一天
+                const lastDay = new Date(y, m, 0).getDate();
+                endDate = `${y}-${m}-${lastDay}`;
 
+            } else if (mode === 'week') {
+                const val = document.getElementById('dateInput').value;
+                if (!val) { alert('請選擇日期'); return; }
+                const curr = new Date(val);
+                // 計算該週週一 (假設週一為第一天)
+                const day = curr.getDay() || 7; // getDay 0是週日, 轉成7
+                if(day !== 1) curr.setHours(-24 * (day - 1)); 
+                startDate = curr.toISOString().split('T')[0];
+                
+                // 週日
+                curr.setHours(24 * 6);
+                endDate = curr.toISOString().split('T')[0];
+
+            } else { // day
+                const val = document.getElementById('dateInput').value;
+                if (!val) { alert('請選擇日期'); return; }
+                startDate = val;
+                endDate = val;
+            }
+
+            // 2. 查詢資料 (一次查範圍內的)
+            // 查紀錄
+            const { data: logs, error: lErr } = await supabase
+                .from('meal_logs')
+                .select('*')
+                .gte('meal_date', startDate)
+                .lte('meal_date', endDate);
+
+            // 查班表
+            const { data: roster, error: rErr } = await supabase
+                .from('duty_roster')
+                .select('*')
+                .gte('date', startDate)
+                .lte('date', endDate);
+
+            if (lErr || rErr) {
+                console.error(lErr, rErr);
+                tbody.innerHTML = '<tr><td colspan="8" style="color:red">讀取失敗</td></tr>';
+                return;
+            }
+
+            // 3. 組合數據與渲染
+            renderTable(startDate, endDate, logs, roster);
+        }
+
+        function renderTable(startStr, endStr, logs, roster) {
             let html = '';
+            let current = new Date(startStr);
+            const end = new Date(endStr);
 
-            checklist.forEach(item => {
-                // 檢查是否有照片
-                const hasPhoto = logs.find(l => l.meal_type === item.meal && l.target_type === item.type);
+            // 跑迴圈：從開始日期到結束日期
+            while (current <= end) {
+                const dateIso = current.toISOString().split('T')[0];
+                const displayDate = `${current.getMonth()+1}/${current.getDate()}`; // 顯示 12/13
+                const dayOfWeek = current.getDay();
                 
-                // 找班表負責人 (假設班表只分早餐/午餐/晚餐，不分病患護家，若有分可再細改)
-                const dutyPerson = roster.find(r => r.shift === item.meal);
-                const dutyName = dutyPerson ? dutyPerson.staff_name : '未排班';
-                
-                let status = '', action = '';
+                // 判斷是否為週末 (0=週日, 6=週六)
+                const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6) ? 'weekend' : '';
+                const weekStr = ['日','一','二','三','四','五','六'][dayOfWeek];
 
-                if (hasPhoto) {
-                    status = '<span class="status-ok">✅ 已上傳</span>';
-                    action = '-';
-                } else {
-                    status = '<span class="status-missing">❌ 缺漏</span>';
-                    // 缺漏時，產生發信按鈕
-                    // 邏輯：寄給 TEST_EMAIL，但在信件內容中說是誰漏傳
-                    const subject = encodeURIComponent(`【缺漏提醒】${date} ${item.label} 便當照片未上傳`);
-                    const body = encodeURIComponent(`您好，\n\n系統偵測到 ${date} 的「${item.label}」照片尚未上傳。\n\n當日值班人員：${dutyName}\n請協助確認。\n\n(此為測試信件)`);
-                    action = `<a href="mailto:${TEST_EMAIL}?subject=${subject}&body=${body}" class="mail-btn">📧 通知補傳</a>`;
-                }
+                // 找當日值班人 (可能有多個，用逗號隔開)
+                const todaysStaff = roster.filter(r => r.date === dateIso).map(r => r.staff_name);
+                // 去除重複並組合
+                const staffStr = [...new Set(todaysStaff)].join(', ') || '<span style="color:#ccc">-</span>';
+
+                // 檢查 6 個欄位
+                const check = (m, t) => {
+                    const found = logs.find(l => l.meal_date === dateIso && l.meal_type === m && l.target_type === t);
+                    return found ? '<span class="ok">✅</span>' : '<span class="missing">❌</span>';
+                };
 
                 html += `
-                    <tr>
-                        <td>${item.meal}</td>
-                        <td>${item.type}</td>
-                        <td>${status}</td>
-                        <td>${dutyName}</td>
-                        <td>${action}</td>
+                    <tr class="${isWeekend}">
+                        <td class="col-date">${displayDate} (${weekStr})</td>
+                        <td class="col-staff" title="${staffStr}">${staffStr}</td>
+                        <td>${check('breakfast', 'patient')}</td>
+                        <td>${check('breakfast', 'nursing')}</td>
+                        <td>${check('lunch', 'patient')}</td>
+                        <td>${check('lunch', 'nursing')}</td>
+                        <td>${check('dinner', 'patient')}</td>
+                        <td>${check('dinner', 'nursing')}</td>
                     </tr>
                 `;
-            });
 
-            tbody.innerHTML = html;
+                // 日期 + 1
+                current.setDate(current.getDate() + 1);
+            }
+
+            document.getElementById('resultBody').innerHTML = html;
         }
     </script>
 </body>
