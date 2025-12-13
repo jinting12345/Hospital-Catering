@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>營養科系統登入</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f4f9; margin: 0; }
+        .login-card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 320px; text-align: center; }
+        h2 { color: #333; margin-bottom: 1.5rem; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #0056b3; }
+        .error { color: red; font-size: 14px; margin-top: 10px; min-height: 20px; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h2>🏥 科內系統登入</h2>
+        <input type="email" id="email" placeholder="公務帳號 (Email)">
+        <input type="password" id="password" placeholder="密碼">
+        <button onclick="handleLogin()" id="loginBtn">登入</button>
+        <div id="msg" class="error"></div>
+    </div>
+
+    <script>
+        // ★★★ 請替換這裡 ★★★
+        const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co';
+        const SUPABASE_KEY = '你的_sb_publishabsb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            const msg = document.getElementById('msg');
+
+            if (!email || !password) {
+                msg.innerText = "請輸入帳號密碼";
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = "驗證中...";
+            msg.innerText = "";
+
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) throw error;
+
+                // 登入成功，跳轉到選單頁
+                window.location.href = 'menu.html';
+
+            } catch (error) {
+                msg.innerText = "登入失敗: " + error.message;
+                btn.disabled = false;
+                btn.innerText = "登入";
+            }
+        }
+
+        // 自動檢查：如果已經登入過，直接進選單
+        async function checkSession() {
+            const { data } = await supabase.auth.getSession();
+            if (data.session) {
+                window.location.href = 'menu.html';
+            }
+        }
+        checkSession();
+    </script>
+</body>
+</html>

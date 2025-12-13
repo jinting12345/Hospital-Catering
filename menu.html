@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功能選單</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; max-width: 600px; margin: 0 auto; }
+        h2 { text-align: center; color: #333; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-decoration: none; color: #333; transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 120px; }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .icon { font-size: 40px; margin-bottom: 10px; }
+        .logout-btn { display: block; width: 100%; padding: 12px; background: #6c757d; color: white; border: none; border-radius: 8px; margin-top: 30px; cursor: pointer; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h2>📋 科內作業選單</h2>
+    <p id="user-info" style="text-align:center; color:#666; font-size:0.9em;">載入中...</p>
+    
+    <div class="grid">
+        <a href="bento.html" class="card">
+            <span class="icon">🍱</span>
+            <span>便當拍照</span>
+        </a>
+        <a href="#" class="card" onclick="alert('功能開發中...')">
+            <span class="icon">🌡️</span>
+            <span>餐車溫度</span>
+        </a>
+        <a href="#" class="card" onclick="alert('功能開發中...')">
+            <span class="icon">🧮</span>
+            <span>熱量計算</span>
+        </a>
+        <a href="#" class="card" style="opacity:0.6; cursor:default;">
+            <span class="icon">➕</span>
+            <span>敬請期待</span>
+        </a>
+    </div>
+
+    <button onclick="handleLogout()" class="logout-btn">登出系統</button>
+
+    <script>
+        // ★★★ 請替換這裡 ★★★
+        const SUPABASE_URL = '你的_URL';
+        const SUPABASE_KEY = '你的_sb_publishable_KEY';
+
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 安全守門員：沒登入就踢回首頁
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = 'index.html';
+            } else {
+                document.getElementById('user-info').innerText = `目前使用者: ${session.user.email}`;
+            }
+        }
+        checkAuth();
+
+        async function handleLogout() {
+            await supabase.auth.signOut();
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
