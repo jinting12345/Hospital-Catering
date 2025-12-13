@@ -25,12 +25,22 @@
     </div>
 
     <script>
-        // ★★★ 設定區 (已幫你填好並加上除錯功能) ★★★
-        const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
+        // ★★★ 強力清潔函式：殺掉所有看不見的隱形符號 ★★★
+        function cleanString(str) {
+            // 只保留 ASCII 範圍內的字元 (英文、數字、標準符號)
+            return str.replace(/[^\x20-\x7E]/g, '').trim();
+        }
+
+        // 原始資料 (不管裡面有沒有混到髒東西，交給程式去洗)
+        const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
+        const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
         
-        // 這裡加上了 .trim()，會自動切除前後的隱形空白
-        const supabase = window.supabase.createClient(SUPABASE_URL.trim(), SUPABASE_KEY.trim());
+        // 經過清洗的資料
+        const SUPABASE_URL = cleanString(RAW_URL);
+        const SUPABASE_KEY = cleanString(RAW_KEY);
+
+        // 初始化
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         async function handleLogin() {
             const email = document.getElementById('email').value;
@@ -59,14 +69,13 @@
                 window.location.href = 'menu.html';
 
             } catch (error) {
-                console.error(error); // 在 F12 console 顯示詳細錯誤
+                console.error(error);
                 msg.innerText = "登入失敗: " + error.message;
                 btn.disabled = false;
                 btn.innerText = "登入";
             }
         }
 
-        // 自動檢查：如果已經登入過，直接進選單
         async function checkSession() {
             const { data } = await supabase.auth.getSession();
             if (data.session) {
