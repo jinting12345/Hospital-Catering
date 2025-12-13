@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班表上傳 (BN專用版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; padding: 20px; background: #f8f9fa; max-width: 800px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .back-btn { text-decoration: none; color: #666; display: flex; align-items: center; }
+        
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h3 { margin-top: 0; }
+        .instruction { background: #e8f0fe; padding: 15px; border-radius: 4px; font-size: 14px; color: #1967d2; margin-bottom: 20px; line-height: 1.6; }
+        
+        input[type="file"] { margin: 20px 0; }
+        button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #218838; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        #status { margin-top: 15px; font-weight: bold; white-space: pre-wrap; }
+        .log-box { margin-top: 10px; padding: 10px; background: #f1f1f1; border-radius: 4px; max-height: 200px; overflow-y: auto; font-size: 12px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="menu.html" class="back-btn">⬅ 回選單</a>
+    </div>
+
+    <div class="card">
+        <h3>📅 上傳 Excel 營養治療科班表</h3>
+        
+        <div class="instruction">
+            <strong>💡 解析邏輯說明：</strong><br>
+            1. 程式會讀取 Excel 中<strong>每一個 Sheet</strong>（假設為不同月份）。<br>
+            2. 從 Sheet 最左上角 (A1) 判斷年份與月份 (例如：...2025年12月...)。<br>
+            3. 尋找第 3 列 (Row 3) 作為日期列 (1, 2, 3...)。<br>
+            4. 尋找最左邊 (Column A) 作為人員姓名。<br>
+            5. <strong>關鍵字判斷：</strong> 只要格子內包含 <code>BN</code> (如 BN, BN+3, BN+1) 即視為值班。
+        </div>
+
+        <input type="file" id="fileInput" accept=".xlsx, .xls">
+        <button id="uploadBtn" onclick="processExcel()">開始分析並匯入</button>
+        <div id="status"></div>
+        <div id="log" class="log-box" style="display:none;"></div>
+    </div>
+
+    <script>
+        function cleanString(str) { return str ? str.replace(/[^\x20-\x7E]/g, '').trim() : ''; }
+        
+        // ★★★ 請替換為您的 Supabase 資訊 ★★★
+        const RAW_URL = '你的_URL';
+        const RAW_KEY = '你的_KEY';
+        const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
+
+        function log(message) {
+            const logBox = document.getElementById('log');
+            logBox.style.display = 'block';
+            logBox.innerHTML += message + '<br>';
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        async function processExcel() {
+            const fileInput = document.getElementById('fileInput');
+            const status = document.getElementById('status');
+            const btn = document.getElementById('uploadBtn');
+            
+            if(!fileInput.files.length) { status.innerText = '❌ 請選擇檔案'; return; }
+            
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            status.innerText = '⏳ 讀取中...';
+            document.getElementById('log').innerHTML = ''; // 清空 Log
+            btn.disabled = true;
+
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    let allInsertData = [];
+                    
+                    // 迴圈遍歷每一個 Sheet (月份)
+                    workbook.SheetNames.forEach(sheetName => {
+                        const sheet = workbook.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+
+                        if (rows.length < 5) return; // 跳過資料太少的 Sheet
+
+                        // 1. 嘗試從 A1 (Row 0, Col 0) 抓取 年份與月份
+                        // 預期格式範例: "營養治療科班表-2025年12月"
+                        const titleCell = rows[0][0];
+                        if (!titleCell || typeof titleCell !== 'string') return;
+
+                        const dateMatch = titleCell.match(/(\d{4})年(\d{1,2})月/);
+                        if (!dateMatch) {
+                            log(`⚠️ 跳過 Sheet [${sheetName}]：無法在 A1 識別出 'YYYY年MM月'`);
+                            return;
+                        }
+
+                        const year = dateMatch[1];
+                        const month = dateMatch[2].padStart(2, '0');
+                        log(`📂 分析 Sheet [${sheetName}] - 識別為 ${year}年${month}月`);
+
+                        // 2. 定位日期列 (Row Index 2, 即 Excel 第 3 列)
+                        // 該列格式預期：[姓名, 1, 2, 3, 4, ... , 31, ...]
+                        const dayRowIndex = 2;
+                        const dayRow = rows[dayRowIndex];
+                        
+                        // 建立 欄位索引 -> 日期字串 的對應表
+                        let colToDateMap = {}; 
+                        for (let c = 1; c < dayRow.length; c++) {
+                            const dayVal = dayRow[c];
+                            // 檢查是否為 1~31 的數字
+                            if (dayVal && !isNaN(dayVal) && dayVal >= 1 && dayVal <= 31) {
+                                const dayStr = String(dayVal).padStart(2, '0');
+                                colToDateMap[c] = `${year}-${month}-${dayStr}`;
+                            }
+                        }
+
+                        // 3. 遍歷人員資料 (從 Row Index 4 開始，即 Excel 第 5 列)
+                        for (let r = 4; r < rows.length; r++) {
+                            const row = rows[r];
+                            const staffName = row[0]; // A欄是姓名
+
+                            if (!staffName) continue; // 跳過沒有名字的列
+
+                            // 檢查該人員每一天的班表
+                            for (let c in colToDateMap) {
+                                const cellValue = row[c];
+                                const dateStr = colToDateMap[c];
+
+                                // 判斷是否包含 BN (轉大寫比對，包含 BN, BN+1, BN+3...)
+                                if (cellValue && typeof cellValue === 'string') {
+                                    if (cellValue.toUpperCase().includes('BN')) {
+                                        
+                                        allInsertData.push({
+                                            date: dateStr,
+                                            shift: cellValue, // 保留原始內容 (如 BN+3)
+                                            staff_name: staffName,
+                                            staff_email: '' // Excel 無 email，留空
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    if (allInsertData.length === 0) {
+                        status.innerText = '⚠️ 分析完成，但在檔案中找不到任何含有 "BN" 的排班資料。';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    status.innerText = `📊 讀取到 ${allInsertData.length} 筆 BN 值班資料，正在寫入資料庫...`;
+                    console.log('準備寫入:', allInsertData);
+
+                    // 寫入 Supabase
+                    const { error } = await supabase.from('duty_roster').insert(allInsertData);
+                    
+                    if(error) throw error;
+                    
+                    status.innerHTML = `<span style="color:green">✅ 成功匯入 ${allInsertData.length} 筆資料！</span>`;
+                    log('✅ 資料庫寫入完成。');
+
+                } catch(err) {
+                    console.error(err);
+                    status.innerText = '❌ 失敗: ' + err.message;
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
