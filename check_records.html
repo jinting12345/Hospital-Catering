@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>紀錄檢查</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f8f9fa; max-width: 800px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .back-btn { text-decoration: none; color: #666; display: flex; align-items: center; }
+        .logout-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        
+        .control-panel { background: white; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; flex-wrap: wrap; }
+        input[type="date"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button.check-btn { padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        
+        .table-container { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f1f3f4; color: #555; font-size: 14px; }
+        .status-ok { color: green; font-weight: bold; }
+        .status-missing { color: red; font-weight: bold; }
+        
+        .mail-btn { padding: 4px 8px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="menu.html" class="back-btn">⬅ 回選單</a>
+        <button onclick="handleLogout()" class="logout-btn">登出</button>
+    </div>
+
+    <div class="control-panel">
+        <label>查詢日期：</label>
+        <input type="date" id="queryDate">
+        <button class="check-btn" onclick="checkStatus()">🔍 檢查缺漏</button>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>餐別</th>
+                    <th>類別</th>
+                    <th>狀態</th>
+                    <th>值班人 (班表)</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="resultBody">
+                <tr><td colspan="5" style="text-align:center;">請選擇日期並按下檢查</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+        // ★★★ 請替換 ★★★
+        const RAW_URL = '你的_URL';
+        const RAW_KEY = '你的_KEY';
+        const TEST_EMAIL = 'ed114536@edah.org.tw'; // ★ 測試用信箱
+
+        const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
+
+        (async () => {
+            const { data } = await supabase.auth.getSession();
+            if(!data.session) window.location.href = 'index.html';
+            document.getElementById('queryDate').value = new Date().toISOString().split('T')[0];
+        })();
+        async function handleLogout() { await supabase.auth.signOut(); window.location.href = 'index.html'; }
+
+        async function checkStatus() {
+            const date = document.getElementById('queryDate').value;
+            const tbody = document.getElementById('resultBody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">查詢中...</td></tr>';
+
+            // 1. 撈取當日所有上傳紀錄
+            const { data: logs } = await supabase.from('meal_logs').select('*').eq('meal_date', date);
+            
+            // 2. 撈取當日班表
+            const { data: roster } = await supabase.from('duty_roster').select('*').eq('date', date);
+
+            // 定義要檢查的項目 (3餐 x 2類別 = 6項)
+            const checklist = [
+                { meal: 'breakfast', type: 'patient', label: '早餐 (病患)' },
+                { meal: 'breakfast', type: 'nursing', label: '早餐 (護家)' },
+                { meal: 'lunch', type: 'patient', label: '午餐 (病患)' },
+                { meal: 'lunch', type: 'nursing', label: '午餐 (護家)' },
+                { meal: 'dinner', type: 'patient', label: '晚餐 (病患)' },
+                { meal: 'dinner', type: 'nursing', label: '晚餐 (護家)' }
+            ];
+
+            let html = '';
+
+            checklist.forEach(item => {
+                // 檢查是否有照片
+                const hasPhoto = logs.find(l => l.meal_type === item.meal && l.target_type === item.type);
+                
+                // 找班表負責人 (假設班表只分早餐/午餐/晚餐，不分病患護家，若有分可再細改)
+                const dutyPerson = roster.find(r => r.shift === item.meal);
+                const dutyName = dutyPerson ? dutyPerson.staff_name : '未排班';
+                
+                let status = '', action = '';
+
+                if (hasPhoto) {
+                    status = '<span class="status-ok">✅ 已上傳</span>';
+                    action = '-';
+                } else {
+                    status = '<span class="status-missing">❌ 缺漏</span>';
+                    // 缺漏時，產生發信按鈕
+                    // 邏輯：寄給 TEST_EMAIL，但在信件內容中說是誰漏傳
+                    const subject = encodeURIComponent(`【缺漏提醒】${date} ${item.label} 便當照片未上傳`);
+                    const body = encodeURIComponent(`您好，\n\n系統偵測到 ${date} 的「${item.label}」照片尚未上傳。\n\n當日值班人員：${dutyName}\n請協助確認。\n\n(此為測試信件)`);
+                    action = `<a href="mailto:${TEST_EMAIL}?subject=${subject}&body=${body}" class="mail-btn">📧 通知補傳</a>`;
+                }
+
+                html += `
+                    <tr>
+                        <td>${item.meal}</td>
+                        <td>${item.type}</td>
+                        <td>${status}</td>
+                        <td>${dutyName}</td>
+                        <td>${action}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
