@@ -304,20 +304,18 @@
         }
     }
 
-    // ===== 從 Supabase 下載範本 =====
+    // ===== 從 Supabase 下載範本 (Authenticated 方式) =====
     async function downloadTemplateFromSupabase() {
         const supabaseUrl = 'https://oipnjnwootorawargsxe.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pcG5qbndvb3RvcmF3YXJnc3hlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ0MDk2ODksImV4cCI6MjA0OTk4NTY4OX0.sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
-        const templatePath = 'system_files/template.docx';
+        const bucket = 'system_files';
+        const filePath = 'templates/template.docx';
         
-        // 從路徑中提取 bucket 和 file path
-        const pathParts = templatePath.split('/');
-        const bucket = pathParts[0];
-        const filePath = pathParts.slice(1).join('/');
-        
-        const url = `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`;
+        // 使用 authenticated 端點
+        const url = `${supabaseUrl}/storage/v1/object/authenticated/${bucket}/${filePath}`;
         
         const response = await fetch(url, {
+            method: 'GET',
             headers: {
                 'Authorization': `Bearer ${supabaseKey}`,
                 'apikey': supabaseKey
@@ -325,7 +323,8 @@
         });
         
         if (!response.ok) {
-            throw new Error(`無法下載範本: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            throw new Error(`無法下載範本 (${response.status}): ${errorText}`);
         }
         
         return await response.arrayBuffer();
