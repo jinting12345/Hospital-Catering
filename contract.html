@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>長照合約產生器 (最終修正版)</title>
+    <title>長照合約產生器 (強力定位版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.11/docxtemplater.js"></script>
@@ -81,7 +81,7 @@
         </div>
 
         <div class="form-group">
-            <label>通訊地址 (已自動移除郵遞區號)</label>
+            <label>通訊地址</label>
             <input type="text" id="contact_address" placeholder="等待讀取..." />
         </div>
 
@@ -116,18 +116,16 @@
             debugDiv.innerHTML += msg + '<br>';
         }
 
-        // 輔助函數：清理地址雜訊 (郵遞區號、括號說明)
+        // 簡單清理：只移除最干擾的「※」提示文字，保留郵遞區號
         function cleanAddressText(text) {
             if (!text) return "";
             return text
-                .replace(/\(郵遞區號[:：\s]*\d+\)/g, "") // 核心：移除 (郵遞區號: 826)
-                .replace(/\(里[、，]鄰.*$/g, "")      // 移除 (里、鄰、郵遞區號非必填) 這種說明
-                .replace(/※/g, "")
-                .replace(/\s+/g, "")                    // 移除所有空白
+                .replace(/※.*?(必填|郵遞區號).*?(\n|$)/g, "") // 移除提示文字
+                .replace(/\s+/g, "") // 移除所有空白
                 .trim();
         }
 
-        // ★★★ 核心解析邏輯 (逐行掃描版) ★★★
+        // ★★★ 核心解析邏輯 (關鍵字定位法) ★★★
         async function parsePDF() {
             const fileInput = document.getElementById('pdf_upload');
             const btn = document.querySelector('button[onclick="parsePDF()"]');
@@ -150,17 +148,16 @@
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    // 保留換行符號，這對定位非常重要
                     const pageStr = textContent.items.map(item => item.str).join("\n"); 
                     fullText += pageStr + "\n";
                 }
 
-                showDebug("✓ PDF 內容讀取完成，開始分析...");
+                showDebug("✓ PDF 內容讀取完成，開始定位資料...");
                 
-                // 產生一個無空白的字串用於基本欄位 (姓名、身分證) 抓取
+                // 產生一個無空白的字串 (用於一般欄位)
                 const cleanText = fullText.replace(/[\s\n\r]/g, "");
 
-                // 1. 抓取基本資料 (使用無空白字串)
+                // 1. 一般欄位解析
                 let userName = "", userId = "", userPhone = "", paymentVal = "240";
                 
                 const headerMatch = cleanText.match(/個案姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
@@ -179,7 +176,6 @@
                     else paymentVal = "240";
                 }
 
-                // 代理人邏輯
                 let contractorName = "", contractorPhone = "";
                 let agentMatch = cleanText.match(/代理人姓名(.*?)代理人身分證/);
                 if (!agentMatch) agentMatch = cleanText.match(/主要聯絡人姓名(.*?)主要聯絡人/);
@@ -192,69 +188,55 @@
                 if (!contractorPhone) contractorPhone = userPhone;
 
                 // ==========================================
-                // ★★★ 地址解析修正 (使用逐行掃描策略) ★★★
+                // ★★★ 地址解析 (定位 + 擷取) ★★★
                 // ==========================================
                 
                 let householdAddress = "";
                 let contactAddress = "";
                 
-                // 將全文字串依「換行」切開，變成一行一行的陣列
-                const lines = fullText.split(/\r?\n/);
-                
-                let foundHouseLabel = false;
-                let foundContactLabel = false;
-
-                // 逐行檢查
-                for (let i = 0; i < lines.length; i++) {
-                    // 去除前後空白以便判斷
-                    const line = lines[i].trim();
-                    
-                    // --- 抓戶籍地址 ---
-                    // 找到含有「戶籍地址」的那一行
-                    if (!foundHouseLabel && line.includes("戶籍地址")) {
-                        // 從這一行開始往後看 5 行，找看看有沒有像地址的文字
-                        for (let j = 0; j <= 5; j++) {
-                            if (i + j >= lines.length) break;
-                            const nextLine = lines[i + j].trim();
-                            // 判斷標準：開頭是縣市，結尾是號 (簡單版)
-                            if (/^[台臺]?[北中南高屏新宜花東澎金連苗彰雲嘉南投][縣市].*?號/.test(nextLine)) {
-                                householdAddress = cleanAddressText(nextLine);
-                                foundHouseLabel = true;
-                                showDebug(`✓ 找到戶籍地址 (第${i+j}行): ${householdAddress}`);
-                                break;
-                            }
-                        }
-                    }
-
-                    // --- 抓通訊地址 ---
-                    // 找到含有「居住」且含有「通訊」的那一行
-                    if (!foundContactLabel && (line.includes("居住") && line.includes("通訊"))) {
-                        // 從這一行開始往後看 5 行
-                        for (let j = 0; j <= 5; j++) {
-                            if (i + j >= lines.length) break;
-                            const nextLine = lines[i + j].trim();
-                            // 這裡的 nextLine 可能包含 (郵遞區號: 826)
-                            if (/^[台臺]?[北中南高屏新宜花東澎金連苗彰雲嘉南投][縣市].*?號/.test(nextLine)) {
-                                contactAddress = cleanAddressText(nextLine); // 使用清理函數移除郵遞區號
-                                foundContactLabel = true;
-                                showDebug(`✓ 找到通訊地址 (第${i+j}行): ${contactAddress}`);
-                                break;
-                            }
-                        }
+                // 1. 抓戶籍地址
+                // 策略：找到「戶籍地址」這四個字的位置，然後擷取它後面的 150 個字，從裡面找地址
+                // 使用原始 fullText 以保留文字間的相對位置
+                const houseIndex = fullText.indexOf("戶籍地址");
+                if (houseIndex !== -1) {
+                    const textChunk = fullText.substring(houseIndex, houseIndex + 200); // 往後抓200字
+                    // 在這段文字裡找：縣市開頭...直到看到「號」為止
+                    // [\s\S]*? 代表可以跨越換行符號
+                    const match = textChunk.match(/([台臺]?[北中南高屏新宜花東澎金連苗彰雲嘉南投][縣市][\s\S]*?號)/);
+                    if (match) {
+                        householdAddress = cleanAddressText(match[1]);
+                        showDebug("✓ 戶籍地址定位成功: " + householdAddress);
                     }
                 }
 
-                // 備用方案：如果逐行掃描失敗 (例如PDF文字全部擠在一起沒換行)，才使用正則搜尋
-                if (!householdAddress && !contactAddress) {
-                    showDebug("⚠️ 逐行掃描失敗，啟用備用正則搜尋...");
-                    if (!householdAddress) {
-                        const m = cleanText.match(/戶籍地址.*?([台臺]?[^0-9\s]+?[縣市].*?號)/);
-                        if (m) householdAddress = cleanAddressText(m[1]);
+                // 2. 抓通訊地址
+                // 策略：優先找「居住(通訊)」或「通訊地址」
+                let contactIndex = fullText.indexOf("居住(通訊)地址");
+                if (contactIndex === -1) contactIndex = fullText.indexOf("通訊地址");
+                if (contactIndex === -1) contactIndex = fullText.indexOf("居住"); // 最寬鬆的找法
+
+                if (contactIndex !== -1) {
+                    // 為了避開標題本身，我們往後一點點開始抓
+                    const textChunk = fullText.substring(contactIndex, contactIndex + 250);
+                    
+                    // 正則解釋：
+                    // [台臺]...[縣市] : 抓縣市開頭
+                    // [\s\S]*? : 包含所有中間的字 (含換行、括號、郵遞區號)
+                    // 號 : 結尾
+                    const match = textChunk.match(/([台臺]?[北中南高屏新宜花東澎金連苗彰雲嘉南投][縣市][\s\S]*?號)/);
+                    if (match) {
+                        contactAddress = cleanAddressText(match[1]);
+                        showDebug("✓ 通訊地址定位成功: " + contactAddress);
                     }
-                    if (!contactAddress) {
-                        // 尋找「居住...通訊...地址」後面的地址
-                        const m = cleanText.match(/居住.*?通訊.*?地址.*?([台臺]?[^0-9\s]+?[縣市].*?號)/);
-                        if (m) contactAddress = cleanAddressText(m[1]);
+                }
+
+                // 備用防呆：如果上面定位失敗，才用最笨的方法在全文搜
+                if (!contactAddress) {
+                    const allAddresses = fullText.match(/[台臺]?[北中南高屏新宜花東澎金連苗彰雲嘉南投][縣市][\s\S]*?號/g);
+                    if (allAddresses && allAddresses.length >= 2) {
+                        // 通常第二個出現的地址就是通訊地址
+                        contactAddress = cleanAddressText(allAddresses[1]);
+                        showDebug("✓ 啟用備用搜尋找到通訊地址");
                     }
                 }
 
@@ -272,7 +254,7 @@
                 if (contactAddress) {
                     alert(`解析成功！\n通訊地址：${contactAddress}`);
                 } else {
-                    alert("基本資料已解析，但地址欄位可能需手動確認。");
+                    alert("地址解析可能不完整，請檢查欄位。");
                 }
 
             } catch (err) {
