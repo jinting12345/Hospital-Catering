@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>長照合約產生器 (PDF自動版)</title>
+    <title>長照合約產生器 (精準修正版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.11/docxtemplater.js"></script>
@@ -18,18 +18,11 @@
         .form-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
         input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
-        
-        /* 按鈕樣式 */
         .btn { color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s; margin-top: 10px; }
         .btn-primary { background-color: #007bff; }
-        .btn-primary:hover { background-color: #0056b3; }
         .btn-success { background-color: #28a745; }
-        .btn-success:hover { background-color: #218838; }
         .btn:disabled { background-color: #ccc; cursor: not-allowed; }
-
-        /* PDF 上傳區塊 */
         .upload-area { border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 8px; background: #f8f9fa; }
-        .upload-area:hover { border-color: #007bff; background: #e9ecef; }
     </style>
 </head>
 <body>
@@ -37,7 +30,7 @@
     <div class="section">
         <h2>步驟 1：上傳 PDF 自動帶入資料</h2>
         <div class="upload-area">
-            <p>請選擇個案的 PDF 評估檔案，系統將自動擷取資料。</p>
+            <p>請上傳「照顧管理評估量表」PDF，系統將精確解析。</p>
             <input type="file" id="pdf_upload" accept="application/pdf" />
             <button class="btn btn-primary" onclick="parsePDF()">📂 讀取 PDF 資料</button>
         </div>
@@ -99,19 +92,18 @@
     </div>
 
     <script>
-        // ================= 設定區 (請確認這裡是否正確) =================
+        // ================= 設定區 =================
         const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co'; 
-        const SUPABASE_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; // 請確認您的 Key
+        // 請將此處換回您正確的 Anon Public Key
+        const SUPABASE_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; 
         const BUCKET_NAME = 'system_files'; 
         const TEMPLATE_NAME = 'template.docx';
         
-        // 設定 PDF.js Worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        // =============================================================
+        // =========================================
 
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // 初始化日期
         window.onload = function() {
             const today = new Date();
             const rocYear = today.getFullYear() - 1911;
@@ -119,7 +111,7 @@
             document.getElementById('visit_date').value = dateStr;
         };
 
-        // --- 功能 A: 解析 PDF ---
+        // ★★★ 核心修正：針對長照平台 PDF 的解析邏輯 ★★★
         async function parsePDF() {
             const fileInput = document.getElementById('pdf_upload');
             const btn = document.querySelector('button[onclick="parsePDF()"]');
@@ -129,7 +121,7 @@
                 return;
             }
 
-            btn.innerText = "處理中...";
+            btn.innerText = "解析中...";
             btn.disabled = true;
 
             try {
@@ -141,50 +133,78 @@
                 let page1Text = "";
                 let page13Text = "";
 
-                // 讀取每一頁文字
+                // 讀取每一頁
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    const pageStr = textContent.items.map(item => item.str).join(" ");
+                    // 加入換行符號以避免文字黏在一起
+                    const pageStr = textContent.items.map(item => item.str).join("\n"); 
                     fullText += pageStr + "\n";
                     if (i === 1) page1Text = pageStr;
                     if (i === 13) page13Text = pageStr;
                 }
 
-                console.log("PDF 讀取完成");
+                console.log("PDF 讀取長度:", fullText.length);
 
-                // --- 正規表達式抓取資料 (與 Python 邏輯對應) ---
-                
-                // 1. 姓名
+                // --- 變數初始化 ---
                 let userName = "";
-                const nameMatch = fullText.match(/個案姓名[:：]?\s*([^\s/]+)/);
-                if (nameMatch) userName = nameMatch[1].trim();
-
-                // 2. 身分證
                 let userId = "";
-                const idMatch = fullText.match(/([A-Z][0-9]{9})/);
-                if (idMatch) userId = idMatch[1].trim();
-
-                // 3. 電話
                 let userPhone = "";
-                const phoneMatch = fullText.match(/(09\d{8}|0\d{1,2}-?\d{6,8})/);
-                if (phoneMatch) userPhone = phoneMatch[0].trim();
-
-                // 4. 地址
                 let householdAddress = "";
-                const hMatch = fullText.match(/戶籍地址\s+([^\n※]+)/);
-                if (hMatch) householdAddress = hMatch[1].trim();
-
                 let contactAddress = "";
-                const cMatch = fullText.match(/居住\(通訊\)地\s+(.+?)(\s|$)/);
-                if (cMatch) {
-                    let raw = cMatch[1].replace("址", "").trim();
-                    contactAddress = raw.replace(/\(郵遞區號[:：].*?\)/, "").trim();
+                let paymentVal = "240";
+                let contractorName = "";
+                let contractorPhone = "";
+
+                // --- 1. 姓名與身分證 (使用最強錨點) ---
+                // 針對 PDF 第5行的特徵： "個案姓名/身分證字號:吳秀枝/S201821350"
+                const preciseMatch = fullText.match(/個案姓名\/身分證字號[:：]?\s*([^\/]+)\/([A-Z][0-9]{9})/);
+                
+                if (preciseMatch) {
+                    userName = preciseMatch[1].trim();
+                    userId = preciseMatch[2].trim();
+                    console.log("精準抓取成功:", userName, userId);
+                } else {
+                    // 備用方案
+                    const nameMatch = fullText.match(/個案姓名[:：]?\s*([^\s]+)/);
+                    if (nameMatch && !nameMatch[1].includes("傳統姓名")) userName = nameMatch[1].trim();
+                    
+                    const idMatch = fullText.match(/([A-Z][0-9]{9})/);
+                    if (idMatch) userId = idMatch[1].trim();
                 }
 
-                // 5. 判斷費用 (先找第1頁，再找第13頁)
-                let paymentVal = "240"; 
+                // --- 2. 電話 (避免抓到日期或ID) ---
+                // 必須是 09 開頭，後面接8個數字
+                const mobileMatch = fullText.match(/個案電話.*?(09\d{8})/s); 
+                // 如果找不到手機，找市話 (07-XXXXXXX)
+                const telMatch = fullText.match(/個案電話.*?(0\d{1,2}-?\d{6,8})/s);
+
+                if (mobileMatch) {
+                    userPhone = mobileMatch[1];
+                } else if (telMatch) {
+                    userPhone = telMatch[1];
+                } else {
+                    // 全文搜尋任何 09 開頭的手機 (風險較高，放在最後)
+                    const fallbackPhone = fullText.match(/(09\d{8})/);
+                    if (fallbackPhone) userPhone = fallbackPhone[1];
+                }
+
+                // --- 3. 地址 ---
+                const hMatch = fullText.match(/戶籍地址\s*([^\n※]+)/);
+                if (hMatch) householdAddress = hMatch[1].replace(/[:：]/g, "").trim();
+
+                // 通訊地址通常比較亂，抓取 "居住(通訊)地" 後面的內容
+                const cMatch = fullText.match(/居住\(通訊\)地\s*([^\n]+)/);
+                if (cMatch) {
+                    let raw = cMatch[1];
+                    // 移除 "址"、"郵遞區號" 等雜訊
+                    raw = raw.replace(/^址\s*/, "").replace(/\(郵遞區號[:：]?\d*\)/, "");
+                    contactAddress = raw.trim();
+                }
+
+                // --- 4. 費用等級 (第X類) ---
                 const levelRegex = /(第\s*[一二三]\s*類)/;
+                // 優先看第1頁 (通常在上方)，沒找到再看第13頁 (計畫摘要)
                 let wMatch = page1Text.match(levelRegex);
                 if (!wMatch && page13Text) wMatch = page13Text.match(levelRegex);
 
@@ -195,27 +215,34 @@
                     else if (txt.includes("第三類")) paymentVal = "240";
                 }
 
-                // 6. 代理人
-                let contractorName = userName;
-                let contractorPhone = userPhone;
-                const agentMatch = fullText.match(/代理人姓名\s+([^\s]+)/);
-                if (agentMatch && agentMatch[1].length > 1) {
-                    contractorName = agentMatch[1].trim();
+                // --- 5. 代理人 (從後方尋找) ---
+                // 代理人通常在 "代理人姓名" 欄位
+                const agentNameMatch = fullText.match(/代理人姓名\s+([^\s]+)/);
+                if (agentNameMatch) {
+                    contractorName = agentNameMatch[1].trim();
+                    // 代理人手機
                     const agentPhoneMatch = fullText.match(/代理人手機\s*(09\d{8})/);
-                    if (agentPhoneMatch) contractorPhone = agentPhoneMatch[1].trim();
+                    if (agentPhoneMatch) contractorPhone = agentPhoneMatch[1];
+                } else {
+                    contractorName = userName; // 無代理人則帶入本人
+                    contractorPhone = userPhone;
                 }
 
-                // --- 填入網頁表單 ---
-                document.getElementById('user_name').value = userName;
-                document.getElementById('user_id').value = userId;
-                document.getElementById('user_phone').value = userPhone;
+                // --- 填入表單 ---
+                document.getElementById('user_name').value = userName || "";
+                document.getElementById('user_id').value = userId || "";
+                document.getElementById('user_phone').value = userPhone || "";
                 document.getElementById('payment').value = paymentVal;
-                document.getElementById('contractor_name').value = contractorName;
-                document.getElementById('contractor_phone').value = contractorPhone;
-                document.getElementById('household_address').value = householdAddress;
-                document.getElementById('contact_address').value = contactAddress;
+                document.getElementById('contractor_name').value = contractorName || "";
+                document.getElementById('contractor_phone').value = contractorPhone || "";
+                document.getElementById('household_address').value = householdAddress || "";
+                document.getElementById('contact_address').value = contactAddress || "";
 
-                alert("資料已自動帶入！請檢查內容是否正確。");
+                if(userName) {
+                    alert(`解析成功！\n姓名：${userName}\n電話：${userPhone}`);
+                } else {
+                    alert("解析完成，但未能抓取到姓名，請確認 PDF 格式。");
+                }
 
             } catch (err) {
                 console.error(err);
@@ -226,29 +253,22 @@
             }
         }
 
-        // --- 功能 B: 計算日期 ---
+        // --- 日期計算與 Word 產生 (維持不變) ---
         function calculateEndDate(visitDateStr) {
             if (!visitDateStr) return "";
             const match = visitDateStr.match(/^(\d{2,3})年(\d{1,2})月(\d{1,2})日$/);
-            if (!match) return "日期格式錯誤";
-
+            if (!match) return "";
             let year = parseInt(match[1]) + 1911;
             let month = parseInt(match[2]);
             let day = parseInt(match[3]);
-
             let newMonth = month + 3;
             let newYear = year;
-            if (newMonth > 12) {
-                newYear += 1;
-                newMonth -= 12;
-            }
+            if (newMonth > 12) { newYear += 1; newMonth -= 12; }
             const lastDayOfNewMonth = new Date(newYear, newMonth, 0).getDate();
             const newDay = Math.min(day, lastDayOfNewMonth);
-
             return `${newYear - 1911}年${newMonth}月${newDay}日`;
         }
 
-        // --- 功能 C: 下載 Word ---
         async function generateWord() {
             const btn = document.querySelector('.btn-success');
             const originalText = btn.innerText;
@@ -256,15 +276,9 @@
             btn.disabled = true;
 
             try {
-                // 1. 下載範本
-                const { data: fileData, error } = await supabase
-                    .storage
-                    .from(BUCKET_NAME)
-                    .download(TEMPLATE_NAME);
+                const { data: fileData, error } = await supabase.storage.from(BUCKET_NAME).download(TEMPLATE_NAME);
+                if (error) throw new Error("下載範本失敗，請檢查 Supabase 設定");
 
-                if (error) throw new Error("下載範本失敗: " + error.message);
-
-                // 2. 準備資料
                 const visitDate = document.getElementById('visit_date').value;
                 const templateData = {
                     user_name: document.getElementById('user_name').value,
@@ -279,27 +293,16 @@
                     end_date: calculateEndDate(visitDate)
                 };
 
-                // 3. 產生 Word
                 const arrayBuffer = await fileData.arrayBuffer();
                 const zip = new PizZip(arrayBuffer);
-                const doc = new window.docxtemplater(zip, {
-                    paragraphLoop: true,
-                    linebreaks: true,
-                });
-
+                const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
                 doc.render(templateData);
 
-                const blob = doc.getZip().generate({
-                    type: "blob",
-                    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                });
-
-                const fileName = `義大醫院契約書_${templateData.user_name}.docx`;
-                saveAs(blob, fileName);
-
+                const blob = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+                saveAs(blob, `義大醫院契約書_${templateData.user_name}.docx`);
+                
             } catch (err) {
                 alert("錯誤: " + err.message);
-                console.error(err);
             } finally {
                 btn.innerText = originalText;
                 btn.disabled = false;
