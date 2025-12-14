@@ -28,6 +28,7 @@
             <button onclick="handleLogout()" class="logout-btn">登出</button>
         </div>
 
+        <!-- 1. 膳管組 -->
         <div class="group-title">🍱 膳管組</div>
         <div class="grid">
             <a href="bento.html" class="card">
@@ -44,14 +45,17 @@
             </a>
         </div>
 
+        <!-- 2. 臨床組 (已更新) -->
         <div class="group-title">🩺 臨床組</div>
         <div class="grid">
-            <div class="card disabled">
-                <span class="icon">➕</span>
-                <span>敬請期待</span>
-            </div>
+            <!-- 這裡連線到我們剛剛做的 JS 版契約書產生器 -->
+            <a href="contract.html" class="card">
+                <span class="icon">📝</span>
+                <span>契約書自動產生</span>
+            </a>
         </div>
 
+        <!-- 3. 教研組 -->
         <div class="group-title">🎓 教研組</div>
         <div class="grid">
             <div class="card disabled">
@@ -60,17 +64,24 @@
             </div>
         </div>
 
+        <!-- 4. 共用區 -->
         <div class="group-title">⚙️ 共用區</div>
         <div class="grid">
             <a href="upload_schedule.html" class="card">
                 <span class="icon">📅</span>
                 <span>班表上傳 (Excel)</span>
             </a>
+            <!-- 我幫您把查看班表補回來了，這樣才完整 -->
+            <a href="view_schedule.html" class="card">
+                <span class="icon">👁️</span>
+                <span>查看班表</span>
+            </a>
         </div>
     </div>
 
     <script>
         function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+        // 您的 URL 和 KEY 保持不變
         const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
         const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
         const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
