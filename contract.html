@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>長照合約產生器 (終極修正版)</title>
+    <title>長照合約產生器 (Py邏輯移植版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.11/docxtemplater.js"></script>
@@ -94,7 +94,7 @@
     <script>
         // ================= 設定區 =================
         const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co'; 
-        // ★★★ 請確認這裡填入的是正確的 Key ★★★
+        // ★★★ 請確認 Key 是否正確 (Anon Public Key) ★★★
         const SUPABASE_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; 
         const BUCKET_NAME = 'system_files'; 
         const TEMPLATE_NAME = 'template.docx';
@@ -110,7 +110,7 @@
             document.getElementById('visit_date').value = dateStr;
         };
 
-        // ★★★ 強力解析函式 ★★★
+        // ★★★ 核心修正：移植 Python 邏輯的 JS 解析器 ★★★
         async function parsePDF() {
             const fileInput = document.getElementById('pdf_upload');
             const btn = document.querySelector('button[onclick="parsePDF()"]');
@@ -130,18 +130,19 @@
                 
                 let fullText = ""; 
                 
-                // 1. 讀取所有頁面
+                // 1. 讀取所有頁面 (模擬 Python 的 extract_text)
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    const pageStr = textContent.items.map(item => item.str).join(" "); // 用空白連接
+                    const pageStr = textContent.items.map(item => item.str).join(" "); 
                     fullText += pageStr + "\n";
                 }
 
-                // 2. 製作「乾淨版文字」 (去除所有空白，專攻姓名/ID/電話)
+                // 2. 製作「乾淨字串」 (模擬 Python 的 clean_text 並移除所有空白)
+                // 這對於找「電話」和「身分證」至關重要，因為 PDF.js 經常在數字中間插入空白
                 const cleanText = fullText.replace(/\s+/g, "");
                 
-                console.log("Clean Text Preview:", cleanText.substring(0, 200));
+                // console.log("Clean Text:", cleanText); // 除錯用
 
                 // --- 變數初始化 ---
                 let userName = "";
@@ -153,63 +154,75 @@
                 let contractorName = "";
                 let contractorPhone = "";
 
-                // --- 策略 A: 姓名與身分證 (使用 Clean Text) ---
-                // 目標：抓取 "個案姓名/身分證字號:吳秀枝/S201821350"
-                const preciseMatch = cleanText.match(/個案姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
+                // ============================================
+                // 邏輯移植區 (對應 Python)
+                // ============================================
+
+                // --- 1. 姓名與身分證 ---
+                // 寫著 "個案姓名/身分證字號:吳秀枝/S201821350"
+                // 這是最穩定的錨點，我們優先抓這裡 
+                const headerMatch = cleanText.match(/個案姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
                 
-                if (preciseMatch) {
-                    userName = preciseMatch[1].trim();
-                    userId = preciseMatch[2].trim();
+                if (headerMatch) {
+                    userName = headerMatch[1].trim();
+                    userId = headerMatch[2].trim();
                 } else {
-                    // 備用：分開抓
-                    const idMatch = cleanText.match(/([A-Z][0-9]{9})/);
-                    if (idMatch) userId = idMatch[1];
-                    
-                    // 姓名備用 (避開 "傳統姓名")
-                    // 在 fullText 中找 "個案姓名" 且後面不是 "傳統姓名"
+                    // Python 備用邏輯: re.search(r"個案姓名[:：]?\s*([^\s/]+)", full_text)
                     const nameMatch = fullText.match(/個案姓名[:：]?\s*([^\s]+)/);
-                    if (nameMatch && !nameMatch[1].includes("傳統姓名")) {
+                    if (nameMatch && !nameMatch[1].includes("傳統姓名")) { // 避開 "傳統姓名" 標籤
                         userName = nameMatch[1].trim();
                     }
+                    const idMatch = cleanText.match(/([A-Z][0-9]{9})/);
+                    if (idMatch) userId = idMatch[1];
                 }
 
-                // --- 策略 B: 電話 (使用 Clean Text) ---
-                // 必須是 09 開頭且後面有8個數字，或者 07-xxxxxxx
-                // 這裡特別加上 "個案電話" 前綴檢查，避免抓到 ID 的數字
+                // --- 2. 電話 (修正重點) ---
+                // 你的 Python 用的是 re.search(r"電話... (09\d{8})")
+                // 在 cleanText 中，"個案電話" 會緊接著號碼，不會被換行打斷
+                // 我們要避開 "S201821350" 這種身分證被誤判為電話 (如截圖中的 01821350)
+                
+                // 先找 "個案電話" 關鍵字後面的號碼 
                 const phoneBlockMatch = cleanText.match(/個案電話.*?((09\d{8})|(0\d{1,2}-?\d{6,8}))/);
                 
                 if (phoneBlockMatch) {
                     userPhone = phoneBlockMatch[1];
                 } else {
-                    // 全域搜尋手機，但排除可能是 ID 的部分 (ID 是 S 開頭，所以純數字 09 開頭通常安全)
-                    const fallbackMobile = cleanText.match(/(09\d{8})/);
-                    if (fallbackMobile) userPhone = fallbackMobile[1];
+                    // 全域搜尋，但要排除身分證 (Regex Lookbehind 在 JS 支援度不一，改用長度判斷)
+                    // 找出所有 09 開頭的 10 碼數字
+                    const allMobiles = cleanText.match(/(09\d{8})/g);
+                    if (allMobiles) {
+                        // 如果找到多個，通常第一個不是身分證的就是電話
+                        // 但因為我們是在 cleanText 找，所以很難誤判身分證(因為身分證有英文字母)
+                        userPhone = allMobiles[0];
+                    }
                 }
 
-                // --- 策略 C: 地址 (使用 Full Text 保留格式) ---
-                // 戶籍地址：找 "戶籍地址" 到 "※" 之間
+                // --- 3. 地址 (必須用 Full Text) ---
+                // Python: re.search(r"戶籍地址\s+([^\n※]+)", full_text) [cite: 13]
                 const hMatch = fullText.match(/戶籍地址\s*([^\n※]+)/);
                 if (hMatch) householdAddress = hMatch[1].replace(/[:：]/g, "").trim();
 
-                // 通訊地址：找 "居住(通訊)地"
+                // Python: re.search(r"居住\(通訊\)地\s+([^\n]+)", full_text) 
+                // 你的 PDF 裡通訊地址中間夾雜了 (郵遞區號:826)
                 const cMatch = fullText.match(/居住\(通訊\)地\s*([^\n]+)/);
                 if (cMatch) {
                     let raw = cMatch[1];
                     raw = raw.replace(/^址/, ""); // 移除可能的 "址" 字
-                    raw = raw.replace(/\(郵遞區號[:：]?\d*\)/g, ""); // 移除郵遞區號
+                    raw = raw.replace(/\(郵遞區號[:：]?\d*\)/g, ""); // ★關鍵修正：移除郵遞區號
                     contactAddress = raw.trim();
                 }
 
-                // --- 策略 D: 費用 (Clean Text) ---
+                // --- 4. 費用 (使用 Clean Text 搜尋關鍵字) ---
+                // Python: 搜尋 "第X類" [cite: 21]
                 if (cleanText.includes("第一類")) paymentVal = "0";
                 else if (cleanText.includes("第二類")) paymentVal = "75";
                 else if (cleanText.includes("第三類")) paymentVal = "240";
 
-                // --- 策略 E: 代理人 (Clean Text) ---
+                // --- 5. 代理人 ---
+                // [cite: 44] 代理人姓名 王錦玉
                 const agentMatch = cleanText.match(/代理人姓名([^\s]+)/);
-                if (agentMatch && !agentMatch[1].includes("姓名")) { // 避免抓到標題
+                if (agentMatch && !agentMatch[1].includes("姓名")) {
                      contractorName = agentMatch[1];
-                     
                      // 代理人電話
                      const agentPhoneMatch = cleanText.match(/代理人手機(09\d{8})/);
                      if (agentPhoneMatch) contractorPhone = agentPhoneMatch[1];
@@ -219,7 +232,7 @@
                     contractorPhone = userPhone;
                 }
 
-                // --- 填入表單 (若變數為空則留白) ---
+                // --- 填入表單 ---
                 document.getElementById('user_name').value = userName || "";
                 document.getElementById('user_id').value = userId || "";
                 document.getElementById('user_phone').value = userPhone || "";
@@ -229,7 +242,11 @@
                 document.getElementById('household_address').value = householdAddress || "";
                 document.getElementById('contact_address').value = contactAddress || "";
 
-                alert(`解析完成！\n姓名：${userName}\n身分證：${userId}\n電話：${userPhone}`);
+                if (userName) {
+                    alert(`解析成功！\n姓名：${userName}\n電話：${userPhone}\n地址已自動清理郵遞區號。`);
+                } else {
+                    alert("解析完成，但未能抓取到姓名，請檢查 PDF 是否為圖片掃描檔。");
+                }
 
             } catch (err) {
                 console.error(err);
