@@ -127,12 +127,32 @@
             <div class="step-number">3</div>
             <div class="step-title">生成 Word 契約書</div>
         </div>
-        <div class="upload-box" style="border-color: #27ae60; background: #f0fdf4;">
-            <p style="color: #27ae60; font-weight: bold;">請選擇 Word 合約範本 (.docx)</p>
+        
+        <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+            <label style="flex: 1; cursor: pointer;">
+                <input type="radio" name="template_mode" value="auto" checked onchange="switchTemplateMode()">
+                <span style="margin-left: 8px; font-weight: bold;">🔒 自動模式 (使用系統範本)</span>
+            </label>
+            <label style="flex: 1; cursor: pointer;">
+                <input type="radio" name="template_mode" value="manual" onchange="switchTemplateMode()">
+                <span style="margin-left: 8px; font-weight: bold;">📤 手動上傳模式</span>
+            </label>
+        </div>
+
+        <div id="auto_mode_box" class="upload-box" style="border-color: #27ae60; background: #f0fdf4;">
+            <p style="color: #27ae60; font-weight: bold;">✅ 將使用系統內建的安全範本</p>
+            <p style="color: #666; font-size: 0.9em; margin-top: 10px;">範本已安全存放於 Supabase,不會外流</p>
+            <button class="btn btn-generate" onclick="generateWordAuto()">📄 下載合約 (自動模式)</button>
+        </div>
+
+        <div id="manual_mode_box" class="upload-box" style="display: none; border-color: #3498db; background: #ebf8ff;">
+            <p style="color: #3498db; font-weight: bold;">請選擇 Word 合約範本 (.docx)</p>
             <input type="file" id="template_upload" accept=".docx" />
-            <button class="btn btn-generate" onclick="generateWord()">📄 下載合約</button>
+            <button class="btn btn-generate" style="background-color: #3498db;" onclick="generateWordManual()">📄 下載合約 (手動模式)</button>
         </div>
     </div>
+
+
 </div>
 
 <script>
@@ -269,12 +289,80 @@
         }
     }
 
-    // ===== Word 生成 - 使用容錯模式 =====
-    async function generateWord() {
+    // ===== 模式切換 =====
+    function switchTemplateMode() {
+        const mode = document.querySelector('input[name="template_mode"]:checked').value;
+        const autoBox = document.getElementById('auto_mode_box');
+        const manualBox = document.getElementById('manual_mode_box');
+        
+        if (mode === 'auto') {
+            autoBox.style.display = 'block';
+            manualBox.style.display = 'none';
+        } else {
+            autoBox.style.display = 'none';
+            manualBox.style.display = 'block';
+        }
+    }
+
+    // ===== 從 Supabase 下載範本 =====
+    async function downloadTemplateFromSupabase() {
+        const supabaseUrl = 'https://oipnjnwootorawargsxe.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pcG5qbndvb3RvcmF3YXJnc3hlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ0MDk2ODksImV4cCI6MjA0OTk4NTY4OX0.sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
+        const templatePath = 'system_files/template.docx';
+        
+        // 從路徑中提取 bucket 和 file path
+        const pathParts = templatePath.split('/');
+        const bucket = pathParts[0];
+        const filePath = pathParts.slice(1).join('/');
+        
+        const url = `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`;
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': supabaseKey
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`無法下載範本: ${response.status} ${response.statusText}`);
+        }
+        
+        return await response.arrayBuffer();
+    }
+
+    // ===== Word 生成 - 自動模式 =====
+    async function generateWordAuto() {
+        if (typeof PizZip === 'undefined') { alert("系統載入中,請稍候..."); return; }
+
+        const btn = document.querySelector('#auto_mode_box .btn-generate');
+        btn.innerText = "⏳ 下載範本中...";
+        btn.disabled = true;
+
+        try {
+            // 從 Supabase 下載範本
+            const arrayBuffer = await downloadTemplateFromSupabase();
+            
+            btn.innerText = "⏳ 生成中...";
+            
+            // 生成合約
+            await generateWordFromBuffer(arrayBuffer);
+            
+        } catch (error) {
+            console.error("詳細錯誤:", error);
+            alert("自動模式失敗: " + error.message);
+        } finally {
+            btn.innerText = "📄 下載合約 (自動模式)";
+            btn.disabled = false;
+        }
+    }
+
+    // ===== Word 生成 - 手動模式 =====
+    async function generateWordManual() {
         if (typeof PizZip === 'undefined') { alert("系統載入中,請稍候..."); return; }
 
         const templateInput = document.getElementById('template_upload');
-        const btn = document.querySelector('.btn-generate');
+        const btn = document.querySelector('#manual_mode_box .btn-generate');
         
         if (templateInput.files.length === 0) {
             alert("請先選擇您的 Word 合約範本 (.docx)!");
@@ -287,76 +375,55 @@
         try {
             const file = templateInput.files[0];
             const arrayBuffer = await file.arrayBuffer();
-            const zip = new PizZip(arrayBuffer);
-
-            const templateData = {
-                user_name: document.getElementById('user_name').value || " ",
-                user_id: document.getElementById('user_id').value || " ",
-                user_phone: document.getElementById('user_phone').value || " ",
-                payment: document.getElementById('payment').value || "0",
-                contractor_name: document.getElementById('contractor_name').value || "同使用者",
-                contractor_phone: document.getElementById('contractor_phone').value || " ",
-                household_address: document.getElementById('household_address').value || " ",
-                contact_address: document.getElementById('contact_address').value || " ",
-                visit_date: document.getElementById('visit_date').value || " ",
-                end_date: document.getElementById('end_date').value || " "
-            };
-
-            // 使用容錯解析器
-            const doc = new window.docxtemplater(zip, {
-                paragraphLoop: true,
-                linebreaks: true,
-                nullGetter: () => "",
-                delimiters: {
-                    start: '{{',
-                    end: '}}'
-                }
-            });
-
-            // 設定資料並渲染
-            doc.setData(templateData);
-            doc.render();
-
-            const blob = doc.getZip().generate({
-                type: "blob",
-                mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            });
-
-            saveAs(blob, `義大醫院契約書_${templateData.user_name}.docx`);
-            alert("✅ 合約生成成功!");
+            
+            await generateWordFromBuffer(arrayBuffer);
             
         } catch (error) {
             console.error("詳細錯誤:", error);
-            
-            // 友善的錯誤訊息
-            let errorMsg = "生成失敗,請檢查模板:\n\n";
-            
-            if (error.properties && error.properties.errors) {
-                const errors = error.properties.errors;
-                const tagErrors = errors.filter(e => e.message && e.message.includes('duplicate'));
-                
-                if (tagErrors.length > 0) {
-                    errorMsg += "❌ 發現標籤格式問題!\n\n";
-                    errorMsg += "原因: Word 在儲存時自動拆開了標籤\n\n";
-                    errorMsg += "解決方法:\n";
-                    errorMsg += "1. 使用 Google Docs 重新製作模板\n";
-                    errorMsg += "2. 或使用 LibreOffice Writer\n";
-                    errorMsg += "3. 或在 Word 中一次打完整個標籤,中間不要停頓\n\n";
-                    errorMsg += "有問題的標籤:\n";
-                    tagErrors.forEach(e => {
-                        const match = e.message.match(/{{([^}]+)}}/);
-                        if (match) errorMsg += `  • {{${match[1]}}}\n`;
-                    });
-                }
-            } else {
-                errorMsg += error.message;
-            }
-            
-            alert(errorMsg);
+            alert("手動模式失敗: " + error.message);
         } finally {
-            btn.innerText = "📄 下載合約";
+            btn.innerText = "📄 下載合約 (手動模式)";
             btn.disabled = false;
         }
+    }
+
+    // ===== Word 生成核心邏輯 (共用) =====
+    async function generateWordFromBuffer(arrayBuffer) {
+        const zip = new PizZip(arrayBuffer);
+
+        const templateData = {
+            user_name: document.getElementById('user_name').value || " ",
+            user_id: document.getElementById('user_id').value || " ",
+            user_phone: document.getElementById('user_phone').value || " ",
+            payment: document.getElementById('payment').value || "0",
+            contractor_name: document.getElementById('contractor_name').value || "同使用者",
+            contractor_phone: document.getElementById('contractor_phone').value || " ",
+            household_address: document.getElementById('household_address').value || " ",
+            contact_address: document.getElementById('contact_address').value || " ",
+            visit_date: document.getElementById('visit_date').value || " ",
+            end_date: document.getElementById('end_date').value || " "
+        };
+
+        const doc = new window.docxtemplater(zip, {
+            paragraphLoop: true,
+            linebreaks: true,
+            nullGetter: () => "",
+            delimiters: {
+                start: '{{',
+                end: '}}'
+            }
+        });
+
+        doc.setData(templateData);
+        doc.render();
+
+        const blob = doc.getZip().generate({
+            type: "blob",
+            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        });
+
+        saveAs(blob, `義大醫院契約書_${templateData.user_name}.docx`);
+        alert("✅ 合約生成成功!");
     }
 </script>
 
