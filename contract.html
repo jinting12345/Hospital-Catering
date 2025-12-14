@@ -1,4 +1,4 @@
-// ★★★ 核心解析邏輯 (改進版 - 參考 Python 邏輯) ★★★
+// ★★★ 核心解析邏輯 (地址修復版) ★★★
         async function parsePDF() {
             const fileInput = document.getElementById('pdf_upload');
             const btn = document.querySelector('button[onclick="parsePDF()"]');
@@ -16,123 +16,103 @@
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
                 
-                let fullText = "";
-                let page1Text = "";
-                let page13Text = "";
-                
-                // 讀取所有頁面，特別保存第1頁和第13頁
+                let fullText = ""; 
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    const pageStr = textContent.items.map(item => item.str).join("\n");
-                    
+                    const pageStr = textContent.items.map(item => item.str).join("\n"); 
                     fullText += pageStr + "\n";
-                    
-                    if (i === 1) page1Text = pageStr;
-                    if (i === 13) page13Text = pageStr;
                 }
 
-                console.log("PDF 讀取完成，總字數:", fullText.length);
+                console.log("PDF文字長度:", fullText.length);
+                
+                // 建立去空白版本用於精確定位
+                const cleanText = fullText.replace(/[\s\n\r]/g, "");
 
-                // --- 1. 個案姓名 ---
+                // --- 1. 個案姓名與身分證 ---
                 let userName = "";
-                let nameMatch = fullText.match(/個案姓名[:：]?\s*([^\s\/]+)/);
-                if (nameMatch) {
-                    userName = nameMatch[1].trim();
-                    // 過濾掉無效值
-                    if (userName.includes("傳統") || userName.length < 2) {
-                        const backupMatch = fullText.match(/個案姓名\s+([\u4e00-\u9fa5]{2,4})/);
-                        if (backupMatch) userName = backupMatch[1].trim();
-                    }
-                }
-
-                // --- 2. 身分證 ---
                 let userId = "";
-                const idMatch = fullText.match(/([A-Z][0-9]{9})/);
-                if (idMatch) userId = idMatch[1].trim();
+                const headerMatch = cleanText.match(/個案姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
+                if (headerMatch) {
+                    let tempName = headerMatch[1].trim();
+                    if (tempName && tempName.length > 1 && !tempName.includes("/")) userName = tempName;
+                    userId = headerMatch[2].trim();
+                }
 
-                // --- 3. 電話 (改用 Python 的雙重策略) ---
+                // 備用姓名抓取
+                if (!userName || userName === "/") {
+                     const backupNameMatch = fullText.match(/個案姓名[:：]?\s*([^\s\/]+)/);
+                     if (backupNameMatch) {
+                         let temp = backupNameMatch[1].trim();
+                         if (!temp.includes("傳統") && !temp.includes("個案") && temp.length > 1) userName = temp;
+                     }
+                }
+
+                // --- 2. 電話 ---
                 let userPhone = "";
-                // 策略A: 身分證後面緊接的電話
-                const phoneMatchA = fullText.match(/[A-Z][0-9]{9}\s+(09\d{8}|0\d{1,2}-?\d{6,8})/);
-                if (phoneMatchA) {
-                    userPhone = phoneMatchA[1].trim();
-                } else {
-                    // 策略B: 電話標籤後的號碼
-                    const phoneMatchB = fullText.match(/電話\s*[:：]?\s*(09\d{8}|0\d{1,2}-?\d{6,8})/);
-                    if (phoneMatchB) userPhone = phoneMatchB[1].trim();
-                }
+                const phoneMatch = cleanText.match(/個案電話.*?((09\d{8})|(0\d{1,2}-?\d{6,8}))/);
+                if (phoneMatch) userPhone = phoneMatch[1];
 
-                // --- 4. 福利身分與費用 (使用 Python 的指定頁數搜尋法) ---
+                // --- 3. 費用等級 ---
                 let paymentVal = "240";
-                let welfareLevel = "";
-                let foundWelfare = false;
-
-                // 排除選項列表的正則：前面不能有數字和點
-                const targetPattern = /(?<!\d\.)(第\s*[一二三]\s*類)/;
-
-                // 優先搜尋第1頁
-                if (page1Text) {
-                    const match1 = page1Text.match(targetPattern);
-                    if (match1) {
-                        welfareLevel = match1[1];
-                        foundWelfare = true;
-                        console.log("★ 在第1頁發現身分:", welfareLevel);
-                    }
+                const welfareMatch = cleanText.match(/長照福利.*?(第[一二三]類)/);
+                if (welfareMatch) {
+                    const level = welfareMatch[1];
+                    if (level.includes("第一類")) paymentVal = "0";
+                    else if (level.includes("第二類")) paymentVal = "75";
+                    else if (level.includes("第三類")) paymentVal = "240";
                 }
 
-                // 如果第1頁沒找到，搜尋第13頁
-                if (!foundWelfare && page13Text) {
-                    const match13 = page13Text.match(targetPattern);
-                    if (match13) {
-                        welfareLevel = match13[1];
-                        foundWelfare = true;
-                        console.log("★ 在第13頁發現身分:", welfareLevel);
-                    }
+                // --- 4. 代理人 ---
+                let contractorName = "";
+                let contractorPhone = "";
+                let agentMatch = cleanText.match(/代理人姓名(.*?)代理人身分證/);
+                if (!agentMatch || agentMatch[1].length < 2) {
+                    agentMatch = cleanText.match(/主要聯絡人姓名(.*?)主要聯絡人/);
+                }
+                if (agentMatch) contractorName = agentMatch[1].replace(/[:：]/g, "").trim();
+
+                const agentMobileMatch = cleanText.match(/代理人手機[:：]?.*?((09\d{8}))/);
+                if (agentMobileMatch) contractorPhone = agentMobileMatch[1];
+                else {
+                    const contactMobileMatch = cleanText.match(/聯絡人手機[:：]?.*?((09\d{8}))/);
+                    if (contactMobileMatch) contractorPhone = contactMobileMatch[1];
                 }
 
-                // 轉換費用
-                if (foundWelfare) {
-                    const cleanLevel = welfareLevel.replace(/\s/g, "");
-                    if (cleanLevel.includes("第一類")) paymentVal = "0";
-                    else if (cleanLevel.includes("第二類")) paymentVal = "75";
-                    else if (cleanLevel.includes("第三類")) paymentVal = "240";
-                }
+                if (!contractorName || contractorName.length < 2) contractorName = userName;
+                if (!contractorPhone) contractorPhone = userPhone;
 
-                // --- 5. 代理人 ---
-                let contractorName = userName;
-                let contractorPhone = userPhone;
-
-                const agentMatch = fullText.match(/代理人姓名\s+([^\s]+)/);
-                if (agentMatch) {
-                    const agentName = agentMatch[1].trim();
-                    if (agentName.length > 1 && !agentName.includes("姓名")) {
-                        contractorName = agentName;
-                        
-                        const agentPhoneMatch = fullText.match(/代理人手機\s*(09\d{8}|0\d{1,2}-?\d{6,8})/);
-                        if (agentPhoneMatch) {
-                            contractorPhone = agentPhoneMatch[1].trim();
-                        }
-                    }
-                }
-
-                // --- 6. 地址 (使用 Python 的正則策略) ---
+                // --- 5. 地址 (改用正則，參考Python版) ---
                 let householdAddress = "";
                 let contactAddress = "";
 
-                // 戶籍地址
-                const hMatch = fullText.match(/戶籍地址\s+([^\n※]+)/);
+                // 戶籍地址：直接用正則抓取
+                const hRegex = /戶籍地址[^\n]*?\n\s*※.*?\n\s*(.+?)(?=\n|$)/;
+                const hMatch = fullText.match(hRegex);
                 if (hMatch) {
                     householdAddress = hMatch[1].trim();
+                } else {
+                    // 簡化版：抓「戶籍地址」後第一個完整地址
+                    const hSimple = fullText.match(/戶籍地址[^\n]+\n[^\n]*\n\s*([^\n]+)/);
+                    if (hSimple) householdAddress = hSimple[1].trim();
                 }
 
-                // 通訊地址
-                const cMatch = fullText.match(/居住\(通訊\)地\s+([^\n]+)/);
+                // 通訊地址：抓「居住(通訊)地址」段落
+                const cRegex = /居住\(通訊\)地\s*址[^\n]*?\n\s*※.*?\n\s*(.+?)(?=\n常用語言|$)/;
+                const cMatch = fullText.match(cRegex);
                 if (cMatch) {
-                    let rawAddress = cMatch[1].trim();
-                    rawAddress = rawAddress.replace(/址/g, "").trim();
-                    rawAddress = rawAddress.replace(/\(郵遞區號[:：].*?\)/g, "").trim();
-                    contactAddress = rawAddress;
+                    let rawC = cMatch[1].trim();
+                    // 移除郵遞區號
+                    rawC = rawC.replace(/\(郵遞區號[:：]?\s*\d*\)/g, "");
+                    contactAddress = rawC.trim();
+                } else {
+                    // 簡化版
+                    const cSimple = fullText.match(/居住\(通訊\)地[^\n]+\n[^\n]*\n\s*([^\n]+)/);
+                    if (cSimple) {
+                        let rawC = cSimple[1].trim();
+                        rawC = rawC.replace(/\(郵遞區號[:：]?\s*\d*\)/g, "");
+                        contactAddress = rawC.trim();
+                    }
                 }
 
                 // --- 填入表單 ---
@@ -145,21 +125,17 @@
                 document.getElementById('household_address').value = householdAddress || "";
                 document.getElementById('contact_address').value = contactAddress || "";
 
-                // 顯示結果
-                const resultMsg = `✅ 解析完成！\n\n` +
-                    `姓名: ${userName}\n` +
-                    `身分證: ${userId}\n` +
-                    `電話: ${userPhone}\n` +
-                    `福利身分: ${welfareLevel || '未偵測到'}\n` +
-                    `部分負擔: ${paymentVal}元\n` +
-                    `代理人: ${contractorName}\n\n` +
-                    `戶籍: ${householdAddress || '❌ 未找到'}\n` +
-                    `通訊: ${contactAddress || '❌ 未找到'}`;
-                
-                alert(resultMsg);
+                console.log("戶籍:", householdAddress);
+                console.log("通訊:", contactAddress);
+
+                if (householdAddress || contactAddress) {
+                    alert(`✅ 解析成功！\n\n戶籍：${householdAddress}\n\n通訊：${contactAddress}`);
+                } else {
+                    alert("⚠️ 姓名電話已解析，但地址未找到，請手動輸入。");
+                }
 
             } catch (err) {
-                console.error("PDF解析錯誤:", err);
+                console.error(err);
                 alert("讀取 PDF 失敗：" + err.message);
             } finally {
                 btn.innerText = "📂 讀取 PDF 資料";
