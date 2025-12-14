@@ -5,10 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>長照合約產生器</title>
     
+    <!-- 1. 引入 Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    
+    <!-- 2. 引入 Word 生成核心 (解決 PizZip is not defined 問題) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.11/docxtemplater.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
+    <!-- 3. 引入 PDF 解析 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
@@ -37,7 +42,7 @@
     </div>
 
     <div class="section">
-        <h2>步驟 2: 確認資料</h2>
+        <h2>步驟 2: 確認資料並生成 Word</h2>
         <div class="form-group"><label>個案姓名</label><input type="text" id="user_name" /></div>
         <div class="form-group"><label>身分證字號</label><input type="text" id="user_id" /></div>
         <div class="form-group"><label>個案電話</label><input type="text" id="user_phone" /></div>
@@ -63,17 +68,21 @@
         </div>
 
         <div class="form-group"><label>訪視日期</label><input type="text" id="visit_date"></div>
-        <button class="btn btn-success" onclick="generateWord()">📄 生成並下載契約書</button>
+        <button class="btn btn-success" onclick="generateWord()">☁️ 從 Supabase 下載並生成 Word</button>
     </div>
 
     <script>
+        // ================= Supabase 設定區 =================
+        // 請確認這些是您目前的專案設定
         const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; 
         const BUCKET_NAME = 'system_files'; 
-        const TEMPLATE_NAME = 'template.docx';
+        const TEMPLATE_NAME = 'template.docx'; // 您的 Word 範本檔名
         
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        // 初始化 Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // 設定 PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
         window.onload = function() {
             const today = new Date();
@@ -81,7 +90,7 @@
             document.getElementById('visit_date').value = `${rocYear}年${today.getMonth() + 1}月${today.getDate()}日`;
         };
 
-        // 清洗函數：移除所有干擾符號
+        // ================= PDF 解析邏輯 (成功版) =================
         function cleanTextDeep(text) {
             return text
                 .replace(/※/g, "")
@@ -91,14 +100,10 @@
                 .replace(/[\s\n\r]/g, "");
         }
 
-        // 輔助函數：從文字中提取地址
         function extractAddressFromChunk(chunk) {
-            // 這個正則可以匹配 3 個字的縣市 (如高雄市) 和 2 個字的縣市 (如嘉義縣)
-            // 關鍵修正：[^0-9\s]{2,3} 允許中間有 2~3 個字
             const regex = /([台臺]?[^0-9\s]{2,3}[縣市].*?[號樓])/;
             const match = chunk.match(regex);
             if (match) {
-                // 自動修復 "址高雄市" 或 "住高雄市" 的情況
                 return match[1].replace(/^[^台臺高新北桃中南基宜花東澎金連苗彰雲嘉屏]*/, "");
             }
             return "";
@@ -131,21 +136,17 @@
                 
                 const cleanText = cleanTextDeep(fullText);
 
-                // --- 解析基本欄位 ---
+                // 解析資料...
                 let userName = "", userId = "", userPhone = "", paymentVal = "240";
-                
                 const headerMatch = cleanText.match(/姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
                 if (headerMatch) { userName = headerMatch[1].replace(/[:：]/g, ""); userId = headerMatch[2]; }
-
                 const phoneMatch = cleanText.match(/個案電話.*?((09\d{8})|(0\d{1,2}-?\d{6,8}))/);
                 if (phoneMatch) userPhone = phoneMatch[1];
-
                 const welfareMatch = cleanText.match(/長照福利.*?(第[一二三]類)/);
                 if (welfareMatch) {
                     if (welfareMatch[1].includes("一")) paymentVal = "0";
                     else if (welfareMatch[1].includes("二")) paymentVal = "75";
                 }
-
                 let contractorName = userName;
                 let contractorPhone = userPhone;
                 let agentMatch = cleanText.match(/代理人姓名(.*?)代理人身分證/);
@@ -157,70 +158,53 @@
                 const agentPhoneMatch = cleanText.match(/(?:代理人|聯絡人)手機[::]?.*?((09\d{8}))/);
                 if (agentPhoneMatch) contractorPhone = agentPhoneMatch[1];
 
-
-                // --- 解析地址 (定位截取法 + 黑名單) ---
-                
+                // 解析地址
                 let hAddr = "";
                 let cAddr = "";
-
-                // 1. 戶籍地址：找到 "戶籍地址" 後，往後抓 50 個字來分析
                 const idxHouse = cleanText.indexOf("戶籍地址");
                 if (idxHouse !== -1) {
                     const chunk = cleanText.substring(idxHouse, idxHouse + 100);
                     hAddr = extractAddressFromChunk(chunk);
                 }
-
-                // 2. 通訊地址：找到 "通訊地址" (或居住通訊地址) 後，往後抓 50 個字
                 let idxContact = cleanText.indexOf("通訊地址");
-                // 如果找不到通訊地址，試試看 "居住"
                 if (idxContact === -1) idxContact = cleanText.indexOf("居住通訊");
                 if (idxContact === -1 && cleanText.indexOf("居住") !== -1) {
-                     // 避免抓到 "居住狀況"
                      const tempIdx = cleanText.lastIndexOf("居住"); 
                      if (tempIdx > idxHouse) idxContact = tempIdx; 
                 }
-
                 if (idxContact !== -1) {
                     const chunk = cleanText.substring(idxContact, idxContact + 100);
                     let foundAddr = extractAddressFromChunk(chunk);
-                    // 確保沒有抓到戶籍地址一樣的內容 (除非真的只有一個地址)
                     if (foundAddr && foundAddr !== hAddr) {
                         cAddr = foundAddr;
                     }
                 }
-
-                // 3. 備用方案：如果上面方法失敗，使用列表法掃描全文件
                 if (!hAddr || !cAddr) {
                     const allAddrRegex = /([台臺]?[^0-9\s]{2,3}[縣市].*?[號樓])/g;
                     const matches = [];
                     let m;
                     while ((m = allAddrRegex.exec(cleanText)) !== null) {
-                        let a = m[1].replace(/^[^台臺高新北桃中南基宜花東澎金連苗彰雲嘉屏]*/, ""); // 修復前綴
-                        // 過濾黑名單
+                        let a = m[1].replace(/^[^台臺高新北桃中南基宜花東澎金連苗彰雲嘉屏]*/, "");
                         if (!a.includes("中心") && !a.includes("醫院") && !a.includes("衛生局") && a.length > 8) {
                             matches.push(a);
                         }
                     }
-
                     if (!hAddr && matches.length > 0) hAddr = matches[0];
                     if (!cAddr && matches.length > 1) cAddr = matches[1];
                 }
-
-                // 最後確認：通訊若空，同戶籍
                 if (!cAddr) cAddr = hAddr;
 
-                // --- 填入 ---
+                // 填入
                 document.getElementById('user_name').value = userName;
                 document.getElementById('user_id').value = userId;
                 document.getElementById('user_phone').value = userPhone;
                 document.getElementById('payment').value = paymentVal;
                 document.getElementById('contractor_name').value = contractorName;
                 document.getElementById('contractor_phone').value = contractorPhone;
-                
                 document.getElementById('household_address').value = hAddr;
                 document.getElementById('contact_address').value = cAddr;
 
-                alert(`解析成功！\n\n戶籍：${hAddr}\n通訊：${cAddr}`);
+                alert(`解析成功！\n戶籍：${hAddr}\n通訊：${cAddr}`);
 
             } catch (err) {
                 alert("錯誤: " + err.message);
@@ -237,53 +221,4 @@
             let year = parseInt(match[1]) + 1911;
             let month = parseInt(match[2]);
             let day = parseInt(match[3]);
-            let newMonth = month + 3;
-            let newYear = year;
-            if (newMonth > 12) { newYear += 1; newMonth -= 12; }
-            const lastDayOfNewMonth = new Date(newYear, newMonth, 0).getDate();
-            const newDay = Math.min(day, lastDayOfNewMonth);
-            return `${newYear - 1911}年${newMonth}月${newDay}日`;
-        }
-
-        async function generateWord() {
-            const btn = document.querySelector('.btn-success');
-            const originalText = btn.innerText;
-            btn.innerText = "⏳ 處理中...";
-            btn.disabled = true;
-
-            try {
-                const { data: fileData, error } = await supabase.storage.from(BUCKET_NAME).download(TEMPLATE_NAME);
-                if (error) throw new Error("下載範本失敗: " + error.message);
-
-                const visitDate = document.getElementById('visit_date').value;
-                const templateData = {
-                    user_name: document.getElementById('user_name').value,
-                    user_id: document.getElementById('user_id').value,
-                    user_phone: document.getElementById('user_phone').value,
-                    payment: document.getElementById('payment').value,
-                    contractor_name: document.getElementById('contractor_name').value,
-                    contractor_phone: document.getElementById('contractor_phone').value,
-                    household_address: document.getElementById('household_address').value,
-                    contact_address: document.getElementById('contact_address').value,
-                    visit_date: visitDate,
-                    end_date: calculateEndDate(visitDate)
-                };
-
-                const arrayBuffer = await fileData.arrayBuffer();
-                const zip = new PizZip(arrayBuffer);
-                const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-                doc.render(templateData);
-
-                const blob = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-                saveAs(blob, `義大醫院契約書_${templateData.user_name}.docx`);
-                
-            } catch (err) {
-                alert("錯誤: " + err.message);
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-            }
-        }
-    </script>
-</body>
-</html>
+            let newMonth
