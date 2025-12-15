@@ -17,12 +17,12 @@
         body { font-family: "Microsoft JhengHei", sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f5f7fa; color: #333; }
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
         
-        /* --- 新增：頂部導航列樣式 (回選單 & 登出) --- */
+        /* --- 頂部導航列樣式 --- */
         .top-nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px; /* 與下方標題保持距離 */
+            margin-bottom: 20px;
         }
 
         .back-link {
@@ -41,7 +41,7 @@
         }
 
         .logout-btn {
-            background-color: #dc3545; /* 紅色背景 */
+            background-color: #dc3545;
             color: white;
             border: none;
             padding: 8px 20px;
@@ -54,7 +54,7 @@
         .logout-btn:hover {
             background-color: #c82333;
         }
-        /* ----------------------------------------- */
+        /* ----------------------- */
 
         .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #edf2f7; padding-bottom: 20px; }
         .header h1 { color: #2c3e50; margin: 0; font-size: 2em; }
@@ -123,14 +123,14 @@
 
 <div class="container">
     
-    <!-- 新增：頂部導航列 (回選單 & 登出) -->
+    <!-- 頂部導航列 -->
     <div class="top-nav">
+        <!-- 修改處：將 href 指向 menu.html -->
         <a href="menu.html" class="back-link">
             <span>⬅</span> 回選單
         </a>
         <button onclick="handleLogout()" class="logout-btn">登出</button>
     </div>
-    <!-- 結束：頂部導航列 -->
 
     <div class="header">
         <h1>長照合約自動生成系統</h1>
@@ -224,12 +224,11 @@
 
 <script>
     // ============================================
-    // 1. 初始化 Supabase (請填入你的 URL 和 Anon Key)
+    // 1. 初始化 Supabase
     const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co'; 
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; 
     const SUPABASE_KEY = RAW_KEY.trim(); 
 
-    // 初始化 Supabase 客戶端
     let supabase = null;
     try {
         if (SUPABASE_KEY.length > 10) {
@@ -263,13 +262,12 @@
         }
     }
 
-    // 新增：登出功能
+    // 登出功能
     async function handleLogout() {
         if (!supabase) return;
         if(confirm("確定要登出嗎？")) {
             const { error } = await supabase.auth.signOut();
             if (!error) {
-                // 登出成功後重新整理頁面，會自動跳出登入視窗
                 location.reload(); 
             } else {
                 alert("登出失敗: " + error.message);
@@ -287,10 +285,9 @@
     }
     
     // ============================================
-    // 3. Supabase 下載 (SDK 版)
+    // 3. Supabase 下載
     // ============================================
     async function downloadTemplateFromSupabase() {
-        // 確認 Bucket ID 大小寫，請依照你 Supabase 面板上的顯示
         const bucketId = 'system_files'; 
         const filePath = 'templates/template.docx';
 
@@ -310,15 +307,12 @@
     }
 
     // ============================================
-    // 4. PDF 解析邏輯 (完整保留您原始版本)
+    // 4. PDF 解析邏輯
     // ============================================
-    
-    // 設定 PDF.js Worker
     if (window.pdfjsLib) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
     }
 
-    // 初始化日期與 Session
     window.onload = function() {
         checkSession();
         const today = new Date();
@@ -327,7 +321,6 @@
         document.getElementById('end_date').value = `${rocYear+1}年${today.getMonth() + 1}月${today.getDate()}日`;
     };
 
-    // 資料清洗
     function cleanTextDeep(text) {
         return text.replace(/※/g, "")
                    .replace(/\(里[、，]鄰[、，]郵遞區號.*?\)/g, "")
@@ -336,7 +329,6 @@
                    .replace(/[\s\n\r]/g, "");
     }
 
-    // 地址擷取
     function extractAddressFromChunk(chunk) {
         const regex = /([台臺]?[^0-9\s]{2,3}[縣市].*?[號樓])/;
         const match = chunk.match(regex);
@@ -346,7 +338,6 @@
         return "";
     }
 
-    // PDF 解析核心
     async function parsePDF() {
         if (typeof pdfjsLib === 'undefined') { alert("PDF 元件載入中..."); return; }
         const fileInput = document.getElementById('pdf_upload');
@@ -371,7 +362,6 @@
             
             const cleanText = cleanTextDeep(fullText);
 
-            // 提取基本資料
             let userName = "", userId = "", userPhone = "", paymentVal = "240";
             const headerMatch = cleanText.match(/姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
             if (headerMatch) { userName = headerMatch[1].replace(/[:：]/g, ""); userId = headerMatch[2]; }
@@ -385,7 +375,6 @@
                 else if (welfareMatch[1].includes("二")) paymentVal = "75";
             }
 
-            // 提取聯絡人
             let contractorName = userName;
             let contractorPhone = userPhone;
             let agentMatch = cleanText.match(/代理人姓名(.*?)代理人身分證/);
@@ -397,7 +386,6 @@
             const agentPhoneMatch = cleanText.match(/(?:代理人|聯絡人)手機[::]?.*?((09\d{8}))/);
             if (agentPhoneMatch) contractorPhone = agentPhoneMatch[1];
 
-            // 提取地址
             let hAddr = "", cAddr = "";
             const idxHouse = cleanText.indexOf("戶籍地址");
             if (idxHouse !== -1) {
@@ -416,7 +404,6 @@
                 if (foundAddr && foundAddr !== hAddr) cAddr = foundAddr;
             }
             
-            // 備用方案
             if (!hAddr || !cAddr) {
                 const allAddrRegex = /([台臺]?[^0-9\s]{2,3}[縣市].*?[號樓])/g;
                 const matches = [];
@@ -430,7 +417,6 @@
             }
             if (!cAddr) cAddr = hAddr;
 
-            // 填入表單
             document.getElementById('user_name').value = userName;
             document.getElementById('user_id').value = userId;
             document.getElementById('user_phone').value = userPhone;
