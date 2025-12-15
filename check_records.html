@@ -16,7 +16,9 @@
         /* 頂部資訊卡 */
         .info-card { background: linear-gradient(135deg, #1e88e5, #1565c0); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .info-item h3 { margin: 0 0 5px 0; font-size: 0.9em; opacity: 0.9; }
-        .info-item span { font-size: 1.8em; font-weight: bold; }
+        /* 調整資訊卡數字樣式，包含預估天數 */
+        .info-number { font-size: 1.8em; font-weight: bold; display: block; }
+        .info-sub { font-size: 0.8em; color: #ffeb3b; margin-top: 5px; font-weight: normal; }
 
         /* 控制列 */
         .controls { background: white; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -35,20 +37,24 @@
         th { background: #f8f9fa; color: #555; font-weight: bold; }
         tr:hover { background-color: #f1f2f6; }
         
-        /* 狀態圖示 (修改為可點擊) */
+        /* 狀態圖示 (可點擊) */
         .status-ok { color: #27ae60; font-size: 1.4em; cursor: pointer; transition: transform 0.2s; display: inline-block; }
         .status-ok:hover { transform: scale(1.2); text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .status-no { color: #ffadad; font-size: 1.2em; cursor: default; } 
         
-        /* 週末與班表 */
-        .weekend { background-color: #fdf2f2; }
+        /* 🔥 修改：週末改為淡黃色底 */
+        .weekend { background-color: #fff3cd; } 
+        
+        /* 🔥 修改：日期樣式統一 (深灰色) */
+        .date-cell { color: #333; font-weight: bold; }
+
         .staff-name { font-weight: bold; color: #2c3e50; font-size: 1.05em; }
         .staff-missing { color: #95a5a6; font-style: italic; font-size: 0.9em; }
 
         /* 讀取遮罩 */
         #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; }
 
-        /* 🔥 新增：圖片預覽視窗 (Modal) */
+        /* 圖片預覽 Modal */
         .modal { display: none; position: fixed; z-index: 1000; padding-top: 50px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.85); }
         .modal-content { margin: auto; display: block; max-width: 90%; max-height: 85vh; border-radius: 8px; box-shadow: 0 4px 15px rgba(255,255,255,0.1); }
         .close-modal { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; transition: 0.3s; cursor: pointer; }
@@ -64,15 +70,23 @@
 
 <div id="imageModal" class="modal" onclick="closeImageModal()">
     <span class="close-modal">&times;</span>
-    <img class="modal-content" id="modalImg" onclick="event.stopPropagation()"> <div id="caption" class="modal-caption"></div>
+    <img class="modal-content" id="modalImg" onclick="event.stopPropagation()">
+    <div id="caption" class="modal-caption"></div>
 </div>
 
 <div class="container">
     <div style="margin-bottom: 10px;"><a href="menu.html" class="btn-back">⬅ 回選單</a></div>
     
     <div class="info-card">
-        <div class="info-item"><h3>雲端空間使用量 (預估)</h3><span id="storage-usage">計算中...</span></div>
-        <div class="info-item" style="text-align: right;"><h3>本月總照片數</h3><span id="total-photos">0 張</span></div>
+        <div class="info-item">
+            <h3>雲端空間使用量 (1000MB)</h3>
+            <span id="storage-usage" class="info-number">計算中...</span>
+            <span id="storage-days" class="info-sub"></span>
+        </div>
+        <div class="info-item" style="text-align: right;">
+            <h3>本月總照片數</h3>
+            <span id="total-photos" class="info-number">0 張</span>
+        </div>
     </div>
 
     <div class="controls">
@@ -87,7 +101,8 @@
             <thead>
                 <tr>
                     <th width="50"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
-                    <th width="120">日期</th> <th width="150">應值班 (BN)</th> <th colspan="2">早餐</th> <th colspan="2">午餐</th> <th colspan="2">晚餐</th>
+                    <th width="120">日期</th>
+                    <th width="150">值班人員</th> <th colspan="2">早餐</th> <th colspan="2">午餐</th> <th colspan="2">晚餐</th>
                 </tr>
                 <tr>
                     <th></th><th></th><th></th>
@@ -108,7 +123,6 @@
     const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
     let currentRecords = []; 
 
-    // 星期的對照表
     const weekDays = ['(日)', '(一)', '(二)', '(三)', '(四)', '(五)', '(六)'];
 
     window.onload = function() {
@@ -170,7 +184,6 @@
             const dateObj = new Date(dateStr);
             const isWeekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
             
-            // 🔥 修改 1: 加入星期顯示
             const weekStr = weekDays[dateObj.getDay()]; 
             const displayDate = `${month}/${day} <span style="font-size:0.9em; color:#666;">${weekStr}</span>`;
 
@@ -182,11 +195,9 @@
 
             const dayRecords = records.filter(r => r.record_date === dateStr);
             
-            // 🔥 修改 2: 點擊 ✅ 可查看照片 (傳入 photo_path)
             const checkStatus = (mType, tType) => {
                 const found = dayRecords.find(r => r.meal_type === mType && r.target_type === tType);
                 if (found) {
-                    // 將路徑傳給 viewPhoto 函式
                     return `<span class="status-ok" onclick="viewPhoto('${found.photo_path}', '${dateStr} ${translate(mType)} ${translate(tType)}')">✅</span>`;
                 } else {
                     return `<span class="status-no">❌</span>`;
@@ -196,25 +207,19 @@
             const row = `
                 <tr class="${isWeekend ? 'weekend' : ''}">
                     <td><input type="checkbox" class="date-checkbox" value="${dateStr}"></td>
-                    <td style="color: #1e88e5; font-weight:bold;">${displayDate}</td>
-                    <td class="staff-name">${displayStaff}</td> 
-                    <td>${checkStatus('breakfast', 'patient')}</td><td>${checkStatus('breakfast', 'care')}</td>
-                    <td>${checkStatus('lunch', 'patient')}</td><td>${checkStatus('lunch', 'care')}</td>
-                    <td>${checkStatus('dinner', 'patient')}</td><td>${checkStatus('dinner', 'care')}</td>
+                    <td class="date-cell">${displayDate}</td> <td class="staff-name">${displayStaff}</td> 
+                    <td>${checkStatus('breakfast', 'patient')}</td><td>${checkStatus('breakfast', 'nursing')}</td>
+                    <td>${checkStatus('lunch', 'patient')}</td><td>${checkStatus('lunch', 'nursing')}</td>
+                    <td>${checkStatus('dinner', 'patient')}</td><td>${checkStatus('dinner', 'nursing')}</td>
                 </tr>`;
             tbody.innerHTML += row;
         }
     }
 
-    // ==========================================
-    // 🔥 新增功能: 檢視照片
-    // ==========================================
     async function viewPhoto(path, captionText) {
         showLoading(true, "載入照片中...");
         try {
-            // 產生臨時的簽名網址 (有效期 60 秒)
             const { data, error } = await supabase.storage.from('private_photos').createSignedUrl(path, 60);
-            
             if (error) throw error;
 
             const modal = document.getElementById('imageModal');
@@ -224,7 +229,6 @@
             modal.style.display = "block";
             modalImg.src = data.signedUrl;
             caption.innerText = captionText;
-
         } catch (err) {
             alert("無法載入照片: " + err.message);
         } finally {
@@ -236,9 +240,6 @@
         document.getElementById('imageModal').style.display = "none";
     }
 
-    // ==========================================
-    // 原有功能: 下載與清除
-    // ==========================================
     async function handleDownloadAndClear() {
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
         if (checkboxes.length === 0) { alert("請先勾選日期"); return; }
@@ -280,8 +281,44 @@
 
     function toggleAll(source) { document.querySelectorAll('.date-checkbox').forEach(cb => cb.checked = source.checked); }
     function showLoading(show, text) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; if(text) document.getElementById('loading-text').innerText = text; }
-    function updateStats(data) { document.getElementById('total-photos').innerText = data.length + " 張"; document.getElementById('storage-usage').innerText = `${(data.length * 0.5).toFixed(1)} MB / 1000 MB`; }
-    function translate(eng) { const map = { 'breakfast': '早餐', 'lunch': '午餐', 'dinner': '晚餐', 'patient': '病患', 'care': '護家' }; return map[eng] || eng; }
+    
+    // 🔥 修改：新增剩餘天數計算
+    function updateStats(data) { 
+        // 1. 計算已用容量
+        const usedSpace = (data.length * 0.5); // 假設每張 0.5MB
+        const totalSpace = 1000; // 總容量 1000MB
+        document.getElementById('total-photos').innerText = data.length + " 張"; 
+        document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
+        
+        // 2. 計算剩餘天數 (預估每日 3MB: 早中晚各2張=6張 * 0.5MB)
+        const dailyUsage = 3; 
+        const remainingSpace = totalSpace - usedSpace;
+        const daysLeft = Math.floor(remainingSpace / dailyUsage);
+
+        const daysLabel = document.getElementById('storage-days');
+        if (daysLeft > 100) {
+            daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
+            daysLabel.style.color = "#ffeb3b"; // 黃色
+        } else if (daysLeft > 30) {
+            daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
+            daysLabel.style.color = "#fff"; 
+        } else {
+            daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
+            daysLabel.style.color = "#ff8a80"; // 紅色警示
+        }
+    }
+    
+    function translate(eng) { 
+        const map = { 
+            'breakfast': '早餐', 
+            'lunch': '午餐', 
+            'dinner': '晚餐', 
+            'patient': '病患', 
+            'nursing': '護家', 
+            'care': '護家' 
+        }; 
+        return map[eng] || eng; 
+    }
 </script>
 </body>
 </html>
