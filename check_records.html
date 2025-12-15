@@ -16,7 +16,6 @@
         /* 頂部資訊卡 */
         .info-card { background: linear-gradient(135deg, #1e88e5, #1565c0); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .info-item h3 { margin: 0 0 5px 0; font-size: 0.9em; opacity: 0.9; }
-        /* 調整資訊卡數字樣式，包含預估天數 */
         .info-number { font-size: 1.8em; font-weight: bold; display: block; }
         .info-sub { font-size: 0.8em; color: #ffeb3b; margin-top: 5px; font-weight: normal; }
 
@@ -37,19 +36,32 @@
         th { background: #f8f9fa; color: #555; font-weight: bold; }
         tr:hover { background-color: #f1f2f6; }
         
-        /* 狀態圖示 (可點擊) */
+        /* 狀態圖示 */
         .status-ok { color: #27ae60; font-size: 1.4em; cursor: pointer; transition: transform 0.2s; display: inline-block; }
         .status-ok:hover { transform: scale(1.2); text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .status-no { color: #ffadad; font-size: 1.2em; cursor: default; } 
         
-        /* 🔥 修改：週末改為淡黃色底 */
-        .weekend { background-color: #fff3cd; } 
+        /* 週末與日期樣式 */
+        .weekend { background-color: #fff3cd; } /* 淡黃色底 */
         
-        /* 🔥 修改：日期樣式統一 (深灰色) */
-        .date-cell { color: #333; font-weight: bold; }
+        /* 🔥 修改：日期改回藍色粗體 */
+        .date-cell { color: #1e88e5; font-weight: bold; font-size: 1.05em; }
 
-        .staff-name { font-weight: bold; color: #2c3e50; font-size: 1.05em; }
-        .staff-missing { color: #95a5a6; font-style: italic; font-size: 0.9em; }
+        /* 🔥 修改：可編輯的人員輸入框 */
+        .staff-input {
+            border: 1px solid transparent; /* 平常看不出框線 */
+            background: transparent;
+            text-align: center;
+            width: 100%;
+            font-size: 1.05em;
+            color: #2c3e50;
+            font-weight: bold;
+            padding: 5px;
+            border-radius: 4px;
+            transition: 0.2s;
+        }
+        .staff-input:hover { border: 1px solid #ccc; background: white; } /* 滑鼠移過去顯示框線 */
+        .staff-input:focus { border: 1px solid #1e88e5; background: white; outline: none; box-shadow: 0 0 0 2px rgba(30,136,229,0.2); }
 
         /* 讀取遮罩 */
         #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; }
@@ -60,6 +72,29 @@
         .close-modal { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; transition: 0.3s; cursor: pointer; }
         .close-modal:hover { color: #bbb; text-decoration: none; cursor: pointer; }
         .modal-caption { margin: auto; display: block; width: 80%; text-align: center; color: #ccc; padding: 10px 0; height: 150px; font-size: 1.2em; }
+
+        /* 自動儲存的提示 Toast */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1001;
+            left: 50%;
+            bottom: 30px;
+            font-size: 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        #toast.show { visibility: visible; -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @-webkit-keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @-webkit-keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
 <body>
@@ -67,6 +102,8 @@
 <div id="loading-overlay">
     <div id="loading-text">資料讀取中...</div>
 </div>
+
+<div id="toast">✅ 資料已自動儲存</div>
 
 <div id="imageModal" class="modal" onclick="closeImageModal()">
     <span class="close-modal">&times;</span>
@@ -102,7 +139,7 @@
                 <tr>
                     <th width="50"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
                     <th width="120">日期</th>
-                    <th width="150">值班人員</th> <th colspan="2">早餐</th> <th colspan="2">午餐</th> <th colspan="2">晚餐</th>
+                    <th width="150">應值班 (可修改)</th> <th colspan="2">早餐</th> <th colspan="2">午餐</th> <th colspan="2">晚餐</th>
                 </tr>
                 <tr>
                     <th></th><th></th><th></th>
@@ -187,11 +224,14 @@
             const weekStr = weekDays[dateObj.getDay()]; 
             const displayDate = `${month}/${day} <span style="font-size:0.9em; color:#666;">${weekStr}</span>`;
 
+            // 處理班表人員
             const daySchedules = schedules.filter(s => s.date === dateStr);
             const allNames = daySchedules.map(s => s.staff_name);
             const uniqueNames = [...new Set(allNames)]; 
-            const staffNames = uniqueNames.join(' / ');
-            const displayStaff = staffNames || '<span class="staff-missing">未排班</span>';
+            let staffNameValue = uniqueNames.join(' / ');
+
+            // 🔥 修改：把人員名字變成可輸入的 <input>
+            const displayStaffInput = `<input type="text" class="staff-input" value="${staffNameValue}" placeholder="未排班" onchange="updateStaff('${dateStr}', this.value)">`;
 
             const dayRecords = records.filter(r => r.record_date === dateStr);
             
@@ -207,8 +247,7 @@
             const row = `
                 <tr class="${isWeekend ? 'weekend' : ''}">
                     <td><input type="checkbox" class="date-checkbox" value="${dateStr}"></td>
-                    <td class="date-cell">${displayDate}</td> <td class="staff-name">${displayStaff}</td> 
-                    <td>${checkStatus('breakfast', 'patient')}</td><td>${checkStatus('breakfast', 'nursing')}</td>
+                    <td class="date-cell">${displayDate}</td> <td>${displayStaffInput}</td> <td>${checkStatus('breakfast', 'patient')}</td><td>${checkStatus('breakfast', 'nursing')}</td>
                     <td>${checkStatus('lunch', 'patient')}</td><td>${checkStatus('lunch', 'nursing')}</td>
                     <td>${checkStatus('dinner', 'patient')}</td><td>${checkStatus('dinner', 'nursing')}</td>
                 </tr>`;
@@ -216,29 +255,69 @@
         }
     }
 
+    // ==========================================
+    // 🔥 新增功能: 更新人員 (自動儲存)
+    // ==========================================
+    async function updateStaff(date, newName) {
+        newName = newName.trim();
+        
+        try {
+            // 1. 先查詢該日期是否已有資料
+            const { data: existing, error: findError } = await supabase
+                .from('duty_roster')
+                .select('*')
+                .eq('date', date);
+
+            if(findError) throw findError;
+
+            if (existing && existing.length > 0) {
+                // 如果有，就更新 (全部更新，避免重複資料導致不一致)
+                // 如果名字被清空，你可以選擇是否要刪除，這邊我邏輯是如果清空就刪除
+                if (newName === "") {
+                    await supabase.from('duty_roster').delete().eq('date', date);
+                } else {
+                    await supabase.from('duty_roster').update({ staff_name: newName }).eq('date', date);
+                }
+            } else {
+                // 如果沒有，且名字不為空，就新增
+                if (newName !== "") {
+                    await supabase.from('duty_roster').insert([{
+                        date: date,
+                        staff_name: newName,
+                        shift: 'BN' // 給一個預設代碼，避免資料庫報錯
+                    }]);
+                }
+            }
+            showToast(`✅ ${date} 更新成功`);
+        } catch (err) {
+            console.error(err);
+            alert("更新失敗: " + err.message);
+        }
+    }
+
+    // 顯示 Toast 提示
+    function showToast(message) {
+        var x = document.getElementById("toast");
+        x.innerText = message;
+        x.className = "show";
+        setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+    }
+
     async function viewPhoto(path, captionText) {
         showLoading(true, "載入照片中...");
         try {
             const { data, error } = await supabase.storage.from('private_photos').createSignedUrl(path, 60);
             if (error) throw error;
-
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImg');
             const caption = document.getElementById('caption');
-
             modal.style.display = "block";
             modalImg.src = data.signedUrl;
             caption.innerText = captionText;
-        } catch (err) {
-            alert("無法載入照片: " + err.message);
-        } finally {
-            showLoading(false);
-        }
+        } catch (err) { alert("無法載入照片: " + err.message); } finally { showLoading(false); }
     }
 
-    function closeImageModal() {
-        document.getElementById('imageModal').style.display = "none";
-    }
+    function closeImageModal() { document.getElementById('imageModal').style.display = "none"; }
 
     async function handleDownloadAndClear() {
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
@@ -282,15 +361,12 @@
     function toggleAll(source) { document.querySelectorAll('.date-checkbox').forEach(cb => cb.checked = source.checked); }
     function showLoading(show, text) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; if(text) document.getElementById('loading-text').innerText = text; }
     
-    // 🔥 修改：新增剩餘天數計算
     function updateStats(data) { 
-        // 1. 計算已用容量
-        const usedSpace = (data.length * 0.5); // 假設每張 0.5MB
-        const totalSpace = 1000; // 總容量 1000MB
+        const usedSpace = (data.length * 0.5); 
+        const totalSpace = 1000; 
         document.getElementById('total-photos').innerText = data.length + " 張"; 
         document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
         
-        // 2. 計算剩餘天數 (預估每日 3MB: 早中晚各2張=6張 * 0.5MB)
         const dailyUsage = 3; 
         const remainingSpace = totalSpace - usedSpace;
         const daysLeft = Math.floor(remainingSpace / dailyUsage);
@@ -298,25 +374,18 @@
         const daysLabel = document.getElementById('storage-days');
         if (daysLeft > 100) {
             daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#ffeb3b"; // 黃色
+            daysLabel.style.color = "#ffeb3b"; 
         } else if (daysLeft > 30) {
             daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
             daysLabel.style.color = "#fff"; 
         } else {
             daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#ff8a80"; // 紅色警示
+            daysLabel.style.color = "#ff8a80"; 
         }
     }
     
     function translate(eng) { 
-        const map = { 
-            'breakfast': '早餐', 
-            'lunch': '午餐', 
-            'dinner': '晚餐', 
-            'patient': '病患', 
-            'nursing': '護家', 
-            'care': '護家' 
-        }; 
+        const map = { 'breakfast': '早餐', 'lunch': '午餐', 'dinner': '晚餐', 'patient': '病患', 'nursing': '護家', 'care': '護家' }; 
         return map[eng] || eng; 
     }
 </script>
