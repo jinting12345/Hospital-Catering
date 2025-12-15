@@ -133,9 +133,8 @@
 
     <script>
         // --- 設定區 ---
-        // 請確認您的 Supabase Storage Bucket 名稱，通常可能是 "images", "photos", "meal_photos" 等
-        // 若您之前的程式碼沒指定 Bucket，請至 Supabase Storage 後台確認 Bucket 名稱並填入下方：
-        const BUCKET_NAME = 'meal_photos'; // <--- 請確認這裡！
+        // 修正 1: Bucket 名稱改為 'photos'
+        const BUCKET_NAME = 'photos'; 
         
         // 假設每張照片平均 500KB (用於估算容量)
         const AVG_PHOTO_SIZE_MB = 0.5; 
@@ -264,13 +263,14 @@
                 const staffEntry = roster.find(r => r.date === dateIso);
                 const staffName = staffEntry ? staffEntry.staff_name : '';
 
-                // 產生 Checkbox
                 // 產生照片狀態
                 const renderCell = (m, t) => {
                     const found = logs.find(l => l.meal_date === dateIso && l.meal_type === m && l.target_type === t);
-                    if (found && found.photo_url) {
+                    
+                    // 修正 2: 欄位改為 image_path
+                    if (found && found.image_path) {
                         // 有照片：顯示可點擊的勾勾
-                        return `<span class="ok" onclick="showImage('${found.photo_url}', '${dateIso} ${m} ${t}')" title="點擊查看照片">✅</span>`;
+                        return `<span class="ok" onclick="showImage('${found.image_path}', '${dateIso} ${m} ${t}')" title="點擊查看照片">✅</span>`;
                     } else {
                         return '<span class="missing">❌</span>';
                     }
@@ -344,9 +344,10 @@
 
                 // 下載所有圖片並加入 ZIP
                 for (const log of targetLogs) {
-                    if (!log.photo_url) continue;
+                    // 修正 3: 下載時讀取 image_path
+                    if (!log.image_path) continue;
                     
-                    const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(log.photo_url);
+                    const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(log.image_path);
                     
                     // 下載圖片 Blob
                     const response = await fetch(data.publicUrl);
@@ -384,8 +385,8 @@
             statusDiv.innerText = '🗑️ 正在刪除資料...';
 
             try {
-                // 1. 刪除 Storage 中的檔案 (需要檔案路徑)
-                const filePaths = logsToDelete.map(l => l.photo_url).filter(p => p);
+                // 1. 刪除 Storage 中的檔案 (修正 4: 刪除時讀取 image_path)
+                const filePaths = logsToDelete.map(l => l.image_path).filter(p => p);
                 if (filePaths.length > 0) {
                     const { error: storageErr } = await supabase.storage.from(BUCKET_NAME).remove(filePaths);
                     if (storageErr) throw new Error('圖片檔案刪除失敗: ' + storageErr.message);
