@@ -12,9 +12,13 @@
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f8f9fa; margin: 0; padding: 20px; color: #333; }
         .container { max-width: 1200px; margin: 0 auto; }
+        
+        /* 頂部資訊卡 */
         .info-card { background: linear-gradient(135deg, #1e88e5, #1565c0); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .info-item h3 { margin: 0 0 5px 0; font-size: 0.9em; opacity: 0.9; }
         .info-item span { font-size: 1.8em; font-weight: bold; }
+
+        /* 控制列 */
         .controls { background: white; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         select, input[type="month"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; }
         .btn { border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; color: white; }
@@ -23,17 +27,33 @@
         .btn-download { background-color: #27ae60; margin-left: auto; }
         .btn-download:hover { background-color: #219150; }
         .btn-back { background-color: #7f8c8d; text-decoration: none; display: inline-block; padding: 8px 16px; border-radius: 4px; color: white; font-weight: bold; font-size: 14px;}
+
+        /* 表格樣式 */
         .table-container { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px; text-align: center; border-bottom: 1px solid #eee; }
         th { background: #f8f9fa; color: #555; font-weight: bold; }
         tr:hover { background-color: #f1f2f6; }
-        .status-ok { color: #27ae60; font-size: 1.2em; }
-        .status-no { color: #ffadad; font-size: 1.2em; }
-        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; }
+        
+        /* 狀態圖示 (修改為可點擊) */
+        .status-ok { color: #27ae60; font-size: 1.4em; cursor: pointer; transition: transform 0.2s; display: inline-block; }
+        .status-ok:hover { transform: scale(1.2); text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .status-no { color: #ffadad; font-size: 1.2em; cursor: default; } 
+        
+        /* 週末與班表 */
         .weekend { background-color: #fdf2f2; }
         .staff-name { font-weight: bold; color: #2c3e50; font-size: 1.05em; }
         .staff-missing { color: #95a5a6; font-style: italic; font-size: 0.9em; }
+
+        /* 讀取遮罩 */
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; }
+
+        /* 🔥 新增：圖片預覽視窗 (Modal) */
+        .modal { display: none; position: fixed; z-index: 1000; padding-top: 50px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.85); }
+        .modal-content { margin: auto; display: block; max-width: 90%; max-height: 85vh; border-radius: 8px; box-shadow: 0 4px 15px rgba(255,255,255,0.1); }
+        .close-modal { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; transition: 0.3s; cursor: pointer; }
+        .close-modal:hover { color: #bbb; text-decoration: none; cursor: pointer; }
+        .modal-caption { margin: auto; display: block; width: 80%; text-align: center; color: #ccc; padding: 10px 0; height: 150px; font-size: 1.2em; }
     </style>
 </head>
 <body>
@@ -42,25 +62,32 @@
     <div id="loading-text">資料讀取中...</div>
 </div>
 
+<div id="imageModal" class="modal" onclick="closeImageModal()">
+    <span class="close-modal">&times;</span>
+    <img class="modal-content" id="modalImg" onclick="event.stopPropagation()"> <div id="caption" class="modal-caption"></div>
+</div>
+
 <div class="container">
     <div style="margin-bottom: 10px;"><a href="menu.html" class="btn-back">⬅ 回選單</a></div>
+    
     <div class="info-card">
         <div class="info-item"><h3>雲端空間使用量 (預估)</h3><span id="storage-usage">計算中...</span></div>
         <div class="info-item" style="text-align: right;"><h3>本月總照片數</h3><span id="total-photos">0 張</span></div>
     </div>
+
     <div class="controls">
         <select id="view-mode"><option value="month">每月檢視</option></select>
         <input type="month" id="month-picker">
         <button class="btn btn-search" onclick="fetchData()">🔍 查詢紀錄</button>
         <button class="btn btn-download" onclick="handleDownloadAndClear()">📥 下載選取日期並清除資料</button>
     </div>
+
     <div class="table-container">
         <table>
             <thead>
                 <tr>
                     <th width="50"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
-                    <th width="100">日期</th>
-                    <th width="150">應值班 (BN)</th> <th colspan="2">早餐</th> <th colspan="2">午餐</th> <th colspan="2">晚餐</th>
+                    <th width="120">日期</th> <th width="150">應值班 (BN)</th> <th colspan="2">早餐</th> <th colspan="2">午餐</th> <th colspan="2">晚餐</th>
                 </tr>
                 <tr>
                     <th></th><th></th><th></th>
@@ -81,6 +108,9 @@
     const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
     let currentRecords = []; 
 
+    // 星期的對照表
+    const weekDays = ['(日)', '(一)', '(二)', '(三)', '(四)', '(五)', '(六)'];
+
     window.onload = function() {
         const now = new Date();
         const yyyy = now.getFullYear();
@@ -100,15 +130,10 @@
         const monthVal = document.getElementById('month-picker').value; 
         const [year, month] = monthVal.split('-');
 
-        // ==========================================
-        // 🔥 關鍵修正：修復日期計算 Bug (解決 12/31 消失問題)
-        // ==========================================
         const startDate = `${year}-${month}-01`;
-        // 直接取得當月最後一天的「數字」，然後組字串，避開時區轉換問題
         const lastDay = new Date(year, month, 0).getDate(); 
         const endDate = `${year}-${month}-${lastDay}`;
 
-        // 1. 讀取班表
         const { data: scheduleData, error: scheError } = await supabase
             .from('duty_roster')
             .select('date, staff_name')
@@ -116,13 +141,9 @@
             .lte('date', endDate);
 
         if (scheError) {
-            console.error(scheError);
-            alert("讀取班表失敗: " + scheError.message);
-            showLoading(false);
-            return;
+            console.error(scheError); alert("讀取班表失敗: " + scheError.message); showLoading(false); return;
         }
 
-        // 2. 讀取照片
         const { data: recordData, error: recError } = await supabase
             .from('meal_records')
             .select('*')
@@ -130,10 +151,7 @@
             .lte('record_date', endDate);
 
         if (recError) {
-            console.error(recError);
-            alert("讀取紀錄失敗: " + recError.message);
-            showLoading(false);
-            return;
+            console.error(recError); alert("讀取紀錄失敗: " + recError.message); showLoading(false); return;
         }
 
         currentRecords = recordData; 
@@ -145,29 +163,40 @@
     function renderTable(year, month, schedules, records) {
         const tbody = document.getElementById('record-body');
         tbody.innerHTML = '';
-        const daysInMonth = new Date(year, month, 0).getDate(); // 取得當月天數
+        const daysInMonth = new Date(year, month, 0).getDate(); 
         
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${year}-${month}-${String(day).padStart(2, '0')}`;
             const dateObj = new Date(dateStr);
             const isWeekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
+            
+            // 🔥 修改 1: 加入星期顯示
+            const weekStr = weekDays[dateObj.getDay()]; 
+            const displayDate = `${month}/${day} <span style="font-size:0.9em; color:#666;">${weekStr}</span>`;
 
             const daySchedules = schedules.filter(s => s.date === dateStr);
             const allNames = daySchedules.map(s => s.staff_name);
-            const uniqueNames = [...new Set(allNames)]; // 去除重複
+            const uniqueNames = [...new Set(allNames)]; 
             const staffNames = uniqueNames.join(' / ');
             const displayStaff = staffNames || '<span class="staff-missing">未排班</span>';
 
             const dayRecords = records.filter(r => r.record_date === dateStr);
+            
+            // 🔥 修改 2: 點擊 ✅ 可查看照片 (傳入 photo_path)
             const checkStatus = (mType, tType) => {
                 const found = dayRecords.find(r => r.meal_type === mType && r.target_type === tType);
-                return found ? `<span class="status-ok">✅</span>` : `<span class="status-no">❌</span>`;
+                if (found) {
+                    // 將路徑傳給 viewPhoto 函式
+                    return `<span class="status-ok" onclick="viewPhoto('${found.photo_path}', '${dateStr} ${translate(mType)} ${translate(tType)}')">✅</span>`;
+                } else {
+                    return `<span class="status-no">❌</span>`;
+                }
             };
 
             const row = `
                 <tr class="${isWeekend ? 'weekend' : ''}">
                     <td><input type="checkbox" class="date-checkbox" value="${dateStr}"></td>
-                    <td style="color: #1e88e5; font-weight:bold;">${month}/${day}</td>
+                    <td style="color: #1e88e5; font-weight:bold;">${displayDate}</td>
                     <td class="staff-name">${displayStaff}</td> 
                     <td>${checkStatus('breakfast', 'patient')}</td><td>${checkStatus('breakfast', 'care')}</td>
                     <td>${checkStatus('lunch', 'patient')}</td><td>${checkStatus('lunch', 'care')}</td>
@@ -177,6 +206,39 @@
         }
     }
 
+    // ==========================================
+    // 🔥 新增功能: 檢視照片
+    // ==========================================
+    async function viewPhoto(path, captionText) {
+        showLoading(true, "載入照片中...");
+        try {
+            // 產生臨時的簽名網址 (有效期 60 秒)
+            const { data, error } = await supabase.storage.from('private_photos').createSignedUrl(path, 60);
+            
+            if (error) throw error;
+
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImg');
+            const caption = document.getElementById('caption');
+
+            modal.style.display = "block";
+            modalImg.src = data.signedUrl;
+            caption.innerText = captionText;
+
+        } catch (err) {
+            alert("無法載入照片: " + err.message);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function closeImageModal() {
+        document.getElementById('imageModal').style.display = "none";
+    }
+
+    // ==========================================
+    // 原有功能: 下載與清除
+    // ==========================================
     async function handleDownloadAndClear() {
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
         if (checkboxes.length === 0) { alert("請先勾選日期"); return; }
@@ -188,11 +250,7 @@
         const selectedDates = Array.from(checkboxes).map(cb => cb.value);
         const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
 
-        if (targetRecords.length === 0) {
-            alert("選取的日期中沒有照片資料！");
-            showLoading(false);
-            return;
-        }
+        if (targetRecords.length === 0) { alert("選取的日期中沒有照片資料！"); showLoading(false); return; }
 
         try {
             const zip = new JSZip();
