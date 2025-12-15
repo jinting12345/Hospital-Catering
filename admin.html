@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>權限管理後台</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f8f9fa; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        .back-btn { text-decoration: none; color: #666; font-weight: bold; font-size: 1.1em; }
+        .back-btn:hover { color: #333; }
+
+        h1 { margin: 0; color: #c0392b; }
+        
+        /* 表格樣式 */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #c0392b; color: white; padding: 12px; text-align: left; border-radius: 4px 4px 0 0; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        tr:hover { background-color: #f9f9f9; }
+
+        /* 標籤樣式 */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.9em; font-weight: bold; }
+        .badge-admin { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        .badge-user { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+
+        /* 按鈕樣式 */
+        .btn-action { border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s; font-weight: bold; color: white; }
+        .btn-promote { background-color: #e74c3c; } /* 升級為管理員 */
+        .btn-promote:hover { background-color: #c0392b; }
+        .btn-demote { background-color: #27ae60; } /* 降級為一般人 */
+        .btn-demote:hover { background-color: #219150; }
+        
+        .loading { text-align: center; color: #666; margin-top: 20px; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🔑 使用者權限管理系統</h1>
+        <a href="menu.html" class="back-btn">⬅ 回選單</a>
+    </div>
+
+    <p style="color: #666;">這裡可以設定系統使用者的權限。請謹慎操作，管理員可以查看所有人的資料。</p>
+    
+    <div id="loading-msg" class="loading">正在驗證身分與讀取資料...</div>
+
+    <table id="user-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>Email 信箱</th>
+                <th>目前角色</th>
+                <th>註冊時間</th>
+                <th>權限操作</th>
+            </tr>
+        </thead>
+        <tbody id="user-list-body">
+            </tbody>
+    </table>
+</div>
+
+<script>
+    // ============================================
+    // 1. 初始化 Supabase (與你其他檔案相同)
+    // ============================================
+    const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
+    const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
+    
+    // 簡單的清理字串函數，避免複製貼上時有隱藏字元
+    function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+    const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
+
+    // ============================================
+    // 2. 核心邏輯
+    // ============================================
+    
+    // 頁面載入時執行
+    window.onload = async function() {
+        await checkAdminAndFetch();
+    };
+
+    async function checkAdminAndFetch() {
+        // A. 取得目前登入者
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+            alert("請先登入！");
+            window.location.href = 'index.html';
+            return;
+        }
+
+        const myUserId = session.user.id;
+
+        // B. 檢查這個人是不是 Admin
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', myUserId)
+            .single();
+
+        if (error || !profile || profile.role !== 'admin') {
+            alert("⛔ 權限不足：你不是管理員，無法進入此頁面。");
+            window.location.href = 'menu.html'; // 踢回選單
+            return;
+        }
+
+        // C. 是管理員，開始抓取所有使用者資料
+        fetchUsers();
+    }
+
+    async function fetchUsers() {
+        // 從 profiles 表格抓全部人，按註冊時間排序
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            alert("讀取清單失敗：" + error.message);
+            return;
+        }
+
+        renderTable(data);
+    }
+
+    function renderTable(users) {
+        const tbody = document.getElementById('user-list-body');
+        tbody.innerHTML = ''; // 清空表格
+        
+        // 隱藏讀取訊息，顯示表格
+        document.getElementById('loading-msg').style.display = 'none';
+        document.getElementById('user-table').style.display = 'table';
+
+        // 取得目前登入者的 ID (避免自己刪除自己權限)
+        supabase.auth.getUser().then(({ data: { user: currentUser } }) => {
+            
+            users.forEach(user => {
+                const is
