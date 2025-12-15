@@ -181,10 +181,12 @@
                 const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
                 const compressed = await imageCompression(file, options);
                 
-                // 2. 準備文字
+                // 2. 準備文字：日期 + 對象 + 餐別
                 const date = document.getElementById('dateInput').value;
                 const mName = curMeal==='breakfast'?'早餐':curMeal==='lunch'?'午餐':'晚餐';
-                const watermarkText = `${date} ${mName}`;
+                const tName = curTarget==='nursing'?'護家餐':'病患餐'; // 新增對象文字
+                
+                const watermarkText = `${date} ${tName} ${mName}`;
 
                 // 3. 壓浮水印
                 const watermarkedBlob = await addWatermark(compressed, watermarkText);
@@ -219,12 +221,12 @@
                 const { error: upErr } = await supabase.storage.from(BUCKET_NAME).upload(fileName, processedFile);
                 if(upErr) throw new Error('圖片上傳失敗: ' + upErr.message);
 
-                // 2. 寫入資料庫 (已修正：使用 image_path)
+                // 2. 寫入資料庫
                 const { error: dbErr } = await supabase.from('meal_logs').insert([{
                     meal_date: date,
                     meal_type: curMeal,
                     target_type: curTarget,
-                    image_path: fileName, // <--- 這裡改回 image_path 了！
+                    image_path: fileName, // 這裡確保使用正確的欄位名稱 image_path
                     uploader_email: (await supabase.auth.getUser()).data.user.email
                 }]);
                 
