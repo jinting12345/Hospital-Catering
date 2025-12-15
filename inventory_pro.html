@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>營養品庫存管理系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- 引入 Excel 匯出工具 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f5f7fa; margin: 0; padding: 20px; }
@@ -23,15 +22,16 @@
         .tab-content { display: none; background: white; padding: 20px; border-radius: 0 5px 5px 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .tab-content.active { display: block; }
 
-        .controls { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center; }
         .search-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 150px; }
-        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; display: inline-flex; align-items: center; gap: 5px; }
         
         /* 按鈕顏色 */
         .btn-in { background: #28a745; } 
         .btn-out { background: #dc3545; } 
         .btn-import { background: #17a2b8; } 
         .btn-export { background: #6f42c1; } /* 匯出紫色 */
+        .btn-stocktake { background: #e67e22; } /* 盤點橘色 */
         
         /* 權限控制：預設隱藏管理員按鈕，等 JS 判斷後再顯示 */
         .admin-only { display: none; }
@@ -68,17 +68,17 @@
         <button class="tab-btn" onclick="switchTab('logs')">📝 進出紀錄</button>
     </div>
 
-    <!-- 分頁 1: 即時庫存 -->
     <div id="stock" class="tab-content active">
         <div class="controls">
             <input type="text" id="searchInput" class="search-input" placeholder="搜尋品名..." onkeyup="filterTable()">
             
-            <!-- 管理員專用按鈕 -->
-            <button class="action-btn btn-import admin-only" onclick="location.href='upload_inventory.html'">📂 Excel匯入</button>
+            <input type="file" id="excel_input" accept=".xlsx, .xls" style="display: none;" onchange="handleExcelImport(this)">
+
+            <button class="action-btn btn-import admin-only" onclick="document.getElementById('excel_input').click()">📂 匯入覆蓋庫存</button>
             <button class="action-btn btn-in admin-only" style="background:#007bff;" onclick="openAddModal()">➕ 新增品項</button>
             
-            <!-- 所有人都可以匯出 -->
-            <button class="action-btn btn-export" onclick="exportStock()">📥 下載庫存表</button>
+            <button class="action-btn btn-stocktake" onclick="downloadForStockTake()">📋 下載盤點單</button>
+            <button class="action-btn btn-export" onclick="exportStock()">📥 下載報表</button>
         </div>
         
         <div style="overflow-x:auto;">
@@ -99,7 +99,6 @@
         </div>
     </div>
 
-    <!-- 分頁 2: 進出紀錄 -->
     <div id="logs" class="tab-content">
         <div class="controls" style="justify-content: space-between;">
             <h3>最近 50 筆異動</h3>
@@ -122,7 +121,6 @@
     </div>
 </div>
 
-<!-- 操作視窗 -->
 <div id="actionModal" class="modal">
     <div class="modal-content">
         <h3 id="modalTitle">執行動作</h3>
@@ -187,7 +185,7 @@
         if (data && data.role === 'admin') {
             isAdmin = true;
             // 顯示所有管理員按鈕
-            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-block');
+            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-flex');
             roleLabel.innerHTML = '<span class="role-badge" style="background:#dc3545;">管理員</span>';
         } else {
             isAdmin = false;
@@ -224,7 +222,7 @@
                 else if(exp < warningDate) statusBadge = '<span class="badge bg-warn">快過期</span>';
             }
 
-            // ★ 權限控制：如果是管理員，顯示入庫+領用；一般人只顯示領用
+            // ★ 權限控制
             let actionButtons = '';
             if (isAdmin) {
                 actionButtons = `
@@ -260,7 +258,6 @@
         const item = inventoryData.find(i => i.id === id);
         if(!item) return;
 
-        // 二次防護：如果一般人想按入庫 (雖然按鈕藏了，但防君子)
         if (type === 'IN' && !isAdmin) return alert('權限不足：僅管理員可入庫');
 
         document.getElementById('actionModal').style.display = 'flex';
@@ -320,7 +317,7 @@
             alert('✅ 操作成功');
             closeModal();
             loadInventory();
-            loadLogs(); // 更新紀錄表
+            loadLogs(); 
         } catch(e) {
             alert('❌ 失敗: ' + e.message);
         } finally {
@@ -330,7 +327,6 @@
 
     async function loadLogs() {
         const tbody = document.getElementById('logBody');
-        // 抓最近 50 筆供預覽
         const { data } = await supabase.from('inventory_logs').select('*').order('created_at', { ascending: false }).limit(50);
         
         if(!data) return;
@@ -352,34 +348,139 @@
         });
     }
 
-    // ★★★ 匯出功能：即時庫存 Excel ★★★
+    // ==========================================
+    // 新增功能：下載盤點單 (格式專為匯入設計)
+    // ==========================================
+    function downloadForStockTake() {
+        if(inventoryData.length === 0) return alert("無資料可下載");
+
+        // 僅匯出必要的欄位，方便盤點後直接修改數字上傳
+        const stockData = inventoryData.map(item => ({
+            "品名": item.name,
+            "分類": item.category,
+            "庫存數量": item.quantity,
+            "單位": item.unit,
+            "有效日期": item.expiry_date
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(stockData);
+        // 設定欄寬方便閱讀
+        ws['!cols'] = [{wch: 20}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 15}];
+        
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "盤點單");
+        
+        const date = new Date().toISOString().slice(0,10);
+        XLSX.writeFile(wb, `庫存盤點單_${date}.xlsx`);
+    }
+
+    // ==========================================
+    // 新增功能：上傳 Excel 並覆蓋庫存
+    // ==========================================
+    async function handleExcelImport(inputElement) {
+        const file = inputElement.files[0];
+        if (!file) return;
+
+        if (!confirm("⚠️ 警告：這將會使用 Excel 中的「庫存數量」直接覆蓋系統中的資料。\n\n確定要執行嗎？")) {
+            inputElement.value = ''; 
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                console.log("匯入資料:", jsonData);
+
+                // 轉換欄位名稱 (Excel 中文 -> Supabase 英文)
+                const updates = jsonData.map(row => {
+                    // 檢查必要欄位
+                    if (!row['品名']) return null;
+
+                    return {
+                        name: row['品名'],           // 必須對應資料庫 Unique Key
+                        category: row['分類'] || '',
+                        quantity: row['庫存數量'] || 0, // 修改這裡以配合你的資料庫欄位
+                        unit: row['單位'] || '罐',
+                        expiry_date: formatExcelDate(row['有效日期'])
+                    };
+                }).filter(item => item !== null); // 過濾掉空行
+
+                if (updates.length === 0) throw new Error("Excel 中沒有有效資料");
+
+                // 批次更新 (Upsert)
+                const { error } = await supabase
+                    .from('inventory')
+                    .upsert(updates, { onConflict: 'name' });
+
+                if (error) throw error;
+
+                // 紀錄這次操作到 Log
+                await supabase.from('inventory_logs').insert([{
+                    product_name: '批次匯入',
+                    action_type: '盤點更新',
+                    change_qty: 0,
+                    final_qty: 0,
+                    operator: currentUser,
+                    note: `Excel 盤點匯入覆蓋 ${updates.length} 筆資料`
+                }]);
+
+                alert(`✅ 成功更新 ${updates.length} 筆庫存資料！`);
+                
+                // 重新載入
+                inputElement.value = '';
+                loadInventory();
+                
+            } catch (error) {
+                console.error('匯入失敗:', error);
+                alert('❌ 匯入失敗: ' + error.message + '\n請確認 Excel 欄位名稱是否為：品名, 分類, 庫存數量, 單位, 有效日期');
+                inputElement.value = '';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // 輔助：處理 Excel 日期格式
+    function formatExcelDate(excelDate) {
+        if (!excelDate) return null;
+        if (typeof excelDate === 'string') return excelDate;
+        // Excel 序列號轉日期
+        if (typeof excelDate === 'number') {
+            const date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
+            return date.toISOString().split('T')[0];
+        }
+        return null;
+    }
+
+    // 一般匯出報表功能 (保留原本的)
     function exportStock() {
         if(inventoryData.length === 0) return alert("無資料可匯出");
-        
-        // 整理資料格式
         const exportData = inventoryData.map(item => ({
             "品名": item.name,
             "分類": item.category,
             "庫存數量": item.quantity,
             "單位": item.unit,
             "有效日期": item.expiry_date || "無",
-            "備註": item.note
         }));
-
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "即時庫存");
         XLSX.writeFile(wb, `庫存報表_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // ★★★ 匯出功能：完整進出紀錄 Excel ★★★
+    // 匯出紀錄 (保留原本的)
     async function exportLogs() {
         const btn = document.querySelector('.btn-export');
+        const originalText = btn.innerText;
         btn.innerText = "下載中...";
         btn.disabled = true;
 
         try {
-            // 抓取最近 1000 筆紀錄 (避免資料太大卡住，1000筆通常夠用)
             const { data, error } = await supabase
                 .from('inventory_logs')
                 .select('*')
@@ -387,7 +488,7 @@
                 .limit(1000);
 
             if(error) throw error;
-            if(data.length === 0) return alert("無紀錄可匯出");
+            if(!data || data.length === 0) return alert("無紀錄可匯出");
 
             const exportData = data.map(log => ({
                 "時間": new Date(log.created_at).toLocaleString('zh-TW'),
@@ -407,13 +508,13 @@
         } catch(e) {
             alert("匯出失敗：" + e.message);
         } finally {
-            btn.innerText = "📥 下載完整紀錄表";
+            btn.innerText = originalText;
             btn.disabled = false;
         }
     }
 
     function closeModal() { document.getElementById('actionModal').style.display = 'none'; }
-    function openAddModal() { location.href = 'inventory.html'; } // 若要新增，跳轉到舊頁面或整合進來
+    function openAddModal() { location.href = 'inventory.html'; }
 </script>
 
 </body>
