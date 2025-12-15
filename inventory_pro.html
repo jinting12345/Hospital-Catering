@@ -5,51 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>營養品庫存管理系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 引入 Excel 匯出工具 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f5f7fa; margin: 0; padding: 20px; }
         .container { max-width: 1000px; margin: 0 auto; }
         
-        /* 頂部導航 */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .back-btn { text-decoration: none; color: #666; font-weight: bold; }
         h2 { margin: 0; color: #2c3e50; }
+        .role-badge { font-size: 12px; padding: 2px 6px; border-radius: 4px; margin-left: 5px; color: white; }
 
-        /* 分頁標籤 */
         .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
         .tab-btn { padding: 10px 20px; border: none; background: #e0e0e0; cursor: pointer; border-radius: 5px 5px 0 0; font-weight: bold; color: #555; }
         .tab-btn.active { background: #1a73e8; color: white; }
 
-        /* 內容區塊 */
         .tab-content { display: none; background: white; padding: 20px; border-radius: 0 5px 5px 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .tab-content.active { display: block; }
 
-        /* 搜尋與控制 */
-        .controls { display: flex; gap: 10px; margin-bottom: 15px; }
-        .search-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .search-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-width: 150px; }
         .action-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
-        .btn-in { background: #28a745; } /* 入庫綠色 */
-        .btn-out { background: #dc3545; } /* 領用紅色 */
-        .btn-edit { background: #6c757d; } /* 編輯灰色 */
-        .btn-import { background: #17a2b8; } /* 匯入藍色 */
+        
+        /* 按鈕顏色 */
+        .btn-in { background: #28a745; } 
+        .btn-out { background: #dc3545; } 
+        .btn-import { background: #17a2b8; } 
+        .btn-export { background: #6f42c1; } /* 匯出紫色 */
+        
+        /* 權限控制：預設隱藏管理員按鈕，等 JS 判斷後再顯示 */
+        .admin-only { display: none; }
 
-        /* 表格樣式 */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         th { background: #f8f9fa; color: #444; font-weight: bold; white-space: nowrap; }
         tr:hover { background-color: #f1f5f9; }
 
-        /* 狀態燈號 */
         .badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; color: white; font-weight: bold; }
         .bg-ok { background: #28a745; }
         .bg-warn { background: #ffc107; color: #333; }
         .bg-danger { background: #dc3545; }
 
-        /* 彈跳視窗 */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; padding: 25px; border-radius: 8px; width: 90%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
     </style>
 </head>
@@ -58,11 +59,10 @@
 <div class="container">
     <div class="header">
         <a href="menu.html" class="back-btn">⬅ 回選單</a>
-        <h2>📦 營養品庫存管理</h2>
+        <h2>📦 營養品庫存 <span id="roleLabel"></span></h2>
         <div style="font-size:14px; color:#666;" id="userInfo">載入中...</div>
     </div>
 
-    <!-- 分頁切換 -->
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('stock')">📊 即時庫存</button>
         <button class="tab-btn" onclick="switchTab('logs')">📝 進出紀錄</button>
@@ -72,8 +72,13 @@
     <div id="stock" class="tab-content active">
         <div class="controls">
             <input type="text" id="searchInput" class="search-input" placeholder="搜尋品名..." onkeyup="filterTable()">
-            <button class="action-btn btn-import" onclick="location.href='upload_inventory.html'">📂 Excel匯入</button>
-            <button class="action-btn btn-in" style="background:#007bff;" onclick="openAddModal()">➕ 新增品項</button>
+            
+            <!-- 管理員專用按鈕 -->
+            <button class="action-btn btn-import admin-only" onclick="location.href='upload_inventory.html'">📂 Excel匯入</button>
+            <button class="action-btn btn-in admin-only" style="background:#007bff;" onclick="openAddModal()">➕ 新增品項</button>
+            
+            <!-- 所有人都可以匯出 -->
+            <button class="action-btn btn-export" onclick="exportStock()">📥 下載庫存表</button>
         </div>
         
         <div style="overflow-x:auto;">
@@ -82,23 +87,24 @@
                     <tr>
                         <th>品名</th>
                         <th>分類</th>
-                        <th>庫存量</th>
+                        <th>庫存</th>
                         <th>單位</th>
                         <th>有效日期</th>
                         <th>狀態</th>
                         <th style="width:180px;">操作</th>
                     </tr>
                 </thead>
-                <tbody id="stockBody">
-                    <!-- JS 生成內容 -->
-                </tbody>
+                <tbody id="stockBody"></tbody>
             </table>
         </div>
     </div>
 
     <!-- 分頁 2: 進出紀錄 -->
     <div id="logs" class="tab-content">
-        <h3>最近 50 筆異動紀錄</h3>
+        <div class="controls" style="justify-content: space-between;">
+            <h3>最近 50 筆異動</h3>
+            <button class="action-btn btn-export" onclick="exportLogs()">📥 下載完整紀錄表</button>
+        </div>
         <table id="logTable">
             <thead>
                 <tr>
@@ -111,14 +117,12 @@
                     <th>備註</th>
                 </tr>
             </thead>
-            <tbody id="logBody">
-                <!-- JS 生成內容 -->
-            </tbody>
+            <tbody id="logBody"></tbody>
         </table>
     </div>
 </div>
 
-<!-- 操作視窗 (領用/入庫) -->
+<!-- 操作視窗 -->
 <div id="actionModal" class="modal">
     <div class="modal-content">
         <h3 id="modalTitle">執行動作</h3>
@@ -134,10 +138,8 @@
             <label>備註 (選填)</label>
             <input type="text" id="actNote" placeholder="例如: 病房領用、廠商進貨">
         </div>
-        
-        <!-- 隱藏欄位 -->
         <input type="hidden" id="actId">
-        <input type="hidden" id="actType"> <!-- IN 或 OUT -->
+        <input type="hidden" id="actType">
         <input type="hidden" id="actCurrentQty">
 
         <div class="modal-footer">
@@ -156,6 +158,7 @@
 
     let inventoryData = [];
     let currentUser = '';
+    let isAdmin = false; // 預設不是管理員
 
     // 初始化
     (async () => {
@@ -163,50 +166,75 @@
         if(!session) window.location.href = 'index.html';
         currentUser = session.user.email;
         document.getElementById('userInfo').innerText = currentUser;
+
+        // ★★★ 檢查權限 ★★★
+        await checkUserRole();
         
         loadInventory();
         loadLogs();
     })();
 
-    // 切換分頁
+    // 檢查是否為管理員
+    async function checkUserRole() {
+        const { data, error } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('email', currentUser)
+            .single();
+
+        const roleLabel = document.getElementById('roleLabel');
+        
+        if (data && data.role === 'admin') {
+            isAdmin = true;
+            // 顯示所有管理員按鈕
+            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-block');
+            roleLabel.innerHTML = '<span class="role-badge" style="background:#dc3545;">管理員</span>';
+        } else {
+            isAdmin = false;
+            roleLabel.innerHTML = '<span class="role-badge" style="background:#28a745;">一般人員</span>';
+        }
+    }
+
     function switchTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(tabName).classList.add('active');
         event.target.classList.add('active');
-        if(tabName === 'logs') loadLogs();
     }
 
-    // 1. 載入庫存
     async function loadInventory() {
         const tbody = document.getElementById('stockBody');
         tbody.innerHTML = '<tr><td colspan="7">載入中...</td></tr>';
-
-        const { data, error } = await supabase.from('inventory').select('*').order('name');
-        if(error) return alert('載入失敗');
-        
-        inventoryData = data;
-        renderTable(data);
+        const { data } = await supabase.from('inventory').select('*').order('name');
+        inventoryData = data || [];
+        renderTable(inventoryData);
     }
 
-    // 渲染表格
     function renderTable(data) {
         const tbody = document.getElementById('stockBody');
         tbody.innerHTML = '';
-
         const today = new Date();
-        const warningDate = new Date();
-        warningDate.setDate(today.getDate() + 90); // 90天內過期亮黃燈
+        const warningDate = new Date(); warningDate.setDate(today.getDate() + 90);
 
         data.forEach(item => {
-            // 判斷效期燈號
             let statusBadge = '<span class="badge bg-ok">正常</span>';
             if(item.expiry_date) {
                 const exp = new Date(item.expiry_date);
                 if(exp < today) statusBadge = '<span class="badge bg-danger">已過期</span>';
                 else if(exp < warningDate) statusBadge = '<span class="badge bg-warn">快過期</span>';
+            }
+
+            // ★ 權限控制：如果是管理員，顯示入庫+領用；一般人只顯示領用
+            let actionButtons = '';
+            if (isAdmin) {
+                actionButtons = `
+                    <button class="action-btn btn-in" onclick="openAction('IN', '${item.id}')">入庫</button>
+                    <button class="action-btn btn-out" onclick="openAction('OUT', '${item.id}')">領用</button>
+                `;
             } else {
-                statusBadge = '<span style="color:#999; font-size:12px;">無效期</span>';
+                actionButtons = `
+                    <button class="action-btn btn-out" onclick="openAction('OUT', '${item.id}')">領用</button>
+                `;
             }
 
             const tr = document.createElement('tr');
@@ -217,26 +245,23 @@
                 <td>${item.unit || '罐'}</td>
                 <td>${item.expiry_date || '-'}</td>
                 <td>${statusBadge}</td>
-                <td>
-                    <button class="action-btn btn-in" onclick="openAction('IN', '${item.id}')">入庫</button>
-                    <button class="action-btn btn-out" onclick="openAction('OUT', '${item.id}')">領用</button>
-                </td>
+                <td>${actionButtons}</td>
             `;
             tbody.innerHTML += tr.outerHTML;
         });
     }
 
-    // 搜尋
     function filterTable() {
         const term = document.getElementById('searchInput').value.toLowerCase();
-        const filtered = inventoryData.filter(i => i.name.toLowerCase().includes(term));
-        renderTable(filtered);
+        renderTable(inventoryData.filter(i => i.name.toLowerCase().includes(term)));
     }
 
-    // 2. 開啟操作視窗 (入庫/領用)
     function openAction(type, id) {
         const item = inventoryData.find(i => i.id === id);
         if(!item) return;
+
+        // 二次防護：如果一般人想按入庫 (雖然按鈕藏了，但防君子)
+        if (type === 'IN' && !isAdmin) return alert('權限不足：僅管理員可入庫');
 
         document.getElementById('actionModal').style.display = 'flex';
         document.getElementById('actId').value = id;
@@ -260,7 +285,6 @@
         }
     }
 
-    // 3. 提交異動
     async function submitAction() {
         const id = document.getElementById('actId').value;
         const type = document.getElementById('actType').value;
@@ -274,23 +298,17 @@
         let newQty = currentQty;
         if(type === 'IN') newQty += qtyInput;
         else {
-            if(currentQty < qtyInput) return alert('庫存不足！無法領用。');
+            if(currentQty < qtyInput) return alert('庫存不足！');
             newQty -= qtyInput;
         }
 
-        const btn = document.getElementById('confirmBtn');
-        btn.disabled = true; btn.innerText = '處理中...';
+        document.getElementById('confirmBtn').disabled = true;
 
         try {
-            // A. 更新庫存表
-            const { error: updateErr } = await supabase
-                .from('inventory')
-                .update({ quantity: newQty })
-                .eq('id', id);
-            if(updateErr) throw updateErr;
+            const { error: upErr } = await supabase.from('inventory').update({ quantity: newQty }).eq('id', id);
+            if(upErr) throw upErr;
 
-            // B. 寫入紀錄表 (流水帳)
-            const { error: logErr } = await supabase.from('inventory_logs').insert([{
+            await supabase.from('inventory_logs').insert([{
                 product_name: name,
                 action_type: type === 'IN' ? '入庫' : '領用',
                 change_qty: qtyInput,
@@ -298,52 +316,104 @@
                 operator: currentUser,
                 note: note
             }]);
-            if(logErr) console.error('紀錄寫入失敗', logErr);
 
             alert('✅ 操作成功');
             closeModal();
-            loadInventory(); // 重新整理列表
-
+            loadInventory();
+            loadLogs(); // 更新紀錄表
         } catch(e) {
             alert('❌ 失敗: ' + e.message);
         } finally {
-            btn.disabled = false;
+            document.getElementById('confirmBtn').disabled = false;
         }
     }
 
-    // 4. 載入歷史紀錄
     async function loadLogs() {
         const tbody = document.getElementById('logBody');
+        // 抓最近 50 筆供預覽
+        const { data } = await supabase.from('inventory_logs').select('*').order('created_at', { ascending: false }).limit(50);
         
-        const { data, error } = await supabase
-            .from('inventory_logs')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(50);
-
-        if(error) return;
-
+        if(!data) return;
         tbody.innerHTML = '';
         data.forEach(log => {
             const dateStr = new Date(log.created_at).toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'numeric', minute:'numeric'});
             const color = log.action_type === '入庫' ? 'green' : 'red';
-            
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="font-size:12px; color:#666;">${dateStr}</td>
-                <td style="color:${color}; font-weight:bold;">${log.action_type}</td>
-                <td>${log.product_name}</td>
-                <td style="font-weight:bold;">${log.change_qty}</td>
-                <td style="color:#888;">${log.final_qty}</td>
-                <td style="font-size:12px;">${log.operator}</td>
-                <td style="font-size:12px; color:#555;">${log.note || '-'}</td>
+            tbody.innerHTML += `
+                <tr>
+                    <td style="font-size:12px;">${dateStr}</td>
+                    <td style="color:${color}; font-weight:bold;">${log.action_type}</td>
+                    <td>${log.product_name}</td>
+                    <td>${log.change_qty}</td>
+                    <td style="color:#888;">${log.final_qty}</td>
+                    <td style="font-size:12px;">${log.operator}</td>
+                    <td style="font-size:12px; color:#555;">${log.note || '-'}</td>
+                </tr>
             `;
-            tbody.innerHTML += tr.outerHTML;
         });
     }
 
+    // ★★★ 匯出功能：即時庫存 Excel ★★★
+    function exportStock() {
+        if(inventoryData.length === 0) return alert("無資料可匯出");
+        
+        // 整理資料格式
+        const exportData = inventoryData.map(item => ({
+            "品名": item.name,
+            "分類": item.category,
+            "庫存數量": item.quantity,
+            "單位": item.unit,
+            "有效日期": item.expiry_date || "無",
+            "備註": item.note
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "即時庫存");
+        XLSX.writeFile(wb, `庫存報表_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // ★★★ 匯出功能：完整進出紀錄 Excel ★★★
+    async function exportLogs() {
+        const btn = document.querySelector('.btn-export');
+        btn.innerText = "下載中...";
+        btn.disabled = true;
+
+        try {
+            // 抓取最近 1000 筆紀錄 (避免資料太大卡住，1000筆通常夠用)
+            const { data, error } = await supabase
+                .from('inventory_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(1000);
+
+            if(error) throw error;
+            if(data.length === 0) return alert("無紀錄可匯出");
+
+            const exportData = data.map(log => ({
+                "時間": new Date(log.created_at).toLocaleString('zh-TW'),
+                "動作": log.action_type,
+                "品名": log.product_name,
+                "異動數量": log.change_qty,
+                "結餘數量": log.final_qty,
+                "操作人": log.operator,
+                "備註": log.note || ""
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "進出紀錄");
+            XLSX.writeFile(wb, `進出貨明細_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+        } catch(e) {
+            alert("匯出失敗：" + e.message);
+        } finally {
+            btn.innerText = "📥 下載完整紀錄表";
+            btn.disabled = false;
+        }
+    }
+
     function closeModal() { document.getElementById('actionModal').style.display = 'none'; }
-    function openAddModal() { location.href = 'inventory.html'; } // 借用舊介面來新增品項，或是整合進來
+    function openAddModal() { location.href = 'inventory.html'; } // 若要新增，跳轉到舊頁面或整合進來
 </script>
 
 </body>
