@@ -68,8 +68,10 @@
     </div>
 
     <script>
-        // 設定區：確認使用 photos
-        const BUCKET_NAME = 'photos'; 
+        // ==========================================
+        // 🔥 重要修改：Bucket 名稱改為 private_photos
+        // ==========================================
+        const BUCKET_NAME = 'private_photos'; 
         
         function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
         const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
@@ -121,7 +123,7 @@
             document.getElementById('summary').innerText = `${date} / ${tName} / ${mName}`;
         }
 
-        // --- 浮水印處理函數 ---
+        // --- 浮水印處理函數 (保持不變) ---
         async function addWatermark(imageFile, text) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -134,34 +136,27 @@
                     canvas.width = img.width;
                     canvas.height = img.height;
                     
-                    // 1. 繪製原圖
                     ctx.drawImage(img, 0, 0);
                     
-                    // 2. 設定文字樣式
                     const fontSize = Math.max(20, canvas.width * 0.04); 
                     ctx.font = `bold ${fontSize}px "Microsoft JhengHei", sans-serif`;
                     ctx.textBaseline = 'bottom';
                     ctx.textAlign = 'right';
                     
-                    // 3. 計算文字寬度
                     const padding = fontSize * 0.4;
                     const textMetrics = ctx.measureText(text);
-                    const textWidth = textMetrics.width;
-                    const boxWidth = textWidth + padding * 2;
+                    const boxWidth = textMetrics.width + padding * 2;
                     const boxHeight = fontSize + padding * 2;
                     
                     const x = canvas.width - padding; 
                     const y = canvas.height - padding; 
 
-                    // 4. 繪製黑底
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                     ctx.fillRect(canvas.width - boxWidth, canvas.height - boxHeight, boxWidth, boxHeight);
                     
-                    // 5. 繪製白字
                     ctx.fillStyle = 'white';
                     ctx.fillText(text, x - padding/2, y - padding/2);
                     
-                    // 6. 輸出
                     canvas.toBlob(blob => {
                         resolve(blob);
                     }, 'image/jpeg', 0.95);
@@ -177,23 +172,18 @@
             document.getElementById('status').innerText = '處理中 (壓縮+壓字)...';
             
             try {
-                // 1. 壓縮
                 const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
                 const compressed = await imageCompression(file, options);
                 
-                // 2. 準備文字：日期 + 對象 + 餐別
                 const date = document.getElementById('dateInput').value;
                 const mName = curMeal==='breakfast'?'早餐':curMeal==='lunch'?'午餐':'晚餐';
-                const tName = curTarget==='nursing'?'護家餐':'病患餐'; // 新增對象文字
+                const tName = curTarget==='nursing'?'護家餐':'病患餐';
                 
                 const watermarkText = `${date} ${tName} ${mName}`;
-
-                // 3. 壓浮水印
                 const watermarkedBlob = await addWatermark(compressed, watermarkText);
                 
                 processedFile = new File([watermarkedBlob], "watermarked.jpg", { type: "image/jpeg" });
 
-                // 4. 顯示
                 document.getElementById('preview').src = URL.createObjectURL(processedFile);
                 document.getElementById('preview').style.display = 'block';
                 document.getElementById('submitBtn').style.display = 'block';
@@ -214,20 +204,27 @@
             document.getElementById('status').innerText = '⏳ 正在上傳至雲端...';
 
             try {
-                // 檔名
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error("無法取得使用者資訊");
+
+                // 檔名格式
                 const fileName = `${date}_${curTarget}_${curMeal}_${Date.now()}.jpg`;
                 
-                // 1. 上傳圖片
+                // 1. 上傳圖片 (到 private_photos)
                 const { error: upErr } = await supabase.storage.from(BUCKET_NAME).upload(fileName, processedFile);
                 if(upErr) throw new Error('圖片上傳失敗: ' + upErr.message);
 
-                // 2. 寫入資料庫
-                const { error: dbErr } = await supabase.from('meal_logs').insert([{
-                    meal_date: date,
+                // 2. 寫入資料庫 (到 meal_records)
+                // 這裡會自動把 email @ 前面的名字當作上傳者名稱
+                const userName = user.email ? user.email.split('@')[0] : 'Unknown';
+
+                const { error: dbErr } = await supabase.from('meal_records').insert([{
+                    user_id: user.id,          // 🔥 新增：誰傳的
+                    record_date: date,         // 🔥 修改欄位名稱
                     meal_type: curMeal,
                     target_type: curTarget,
-                    image_path: fileName, // 這裡確保使用正確的欄位名稱 image_path
-                    uploader_email: (await supabase.auth.getUser()).data.user.email
+                    photo_path: fileName,      // 🔥 修改欄位名稱
+                    uploader_name: userName    // 🔥 新增：紀錄值班人
                 }]);
                 
                 if(dbErr) throw new Error('資料庫寫入失敗: ' + dbErr.message);
