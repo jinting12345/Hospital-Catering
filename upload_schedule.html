@@ -11,7 +11,7 @@
         .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
         .back-btn { text-decoration: none; color: #666; display: flex; align-items: center; }
         
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h3 { margin-top: 0; color: #333; }
         .instruction { background: #e8f0fe; padding: 15px; border-radius: 4px; font-size: 14px; color: #1967d2; margin-bottom: 20px; line-height: 1.6; }
         
@@ -25,6 +25,15 @@
         
         #status { margin-top: 15px; font-weight: bold; white-space: pre-wrap; line-height: 1.5; }
         .log-box { margin-top: 15px; padding: 12px; background: #212529; color: #0f0; border-radius: 6px; max-height: 250px; overflow-y: auto; font-size: 12px; font-family: Consolas, monospace; display: none; }
+
+        /* 新增：結果預覽表格樣式 */
+        #resultArea { display: none; margin-top: 20px; }
+        .table-container { overflow-x: auto; border: 1px solid #dee2e6; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; font-size: 14px; }
+        th { background-color: #f1f3f5; color: #495057; white-space: nowrap; }
+        tr:hover { background-color: #f8f9fa; }
+        .tag-shift { background: #e3f2fd; color: #0d47a1; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -39,7 +48,7 @@
             <strong>💡 功能更新：</strong><br>
             1. 預設自動抓取 Excel 中 <strong>最新的一個月份</strong>。<br>
             2. 若要上傳特定月份（如修正舊資料），請在下方手動選擇。<br>
-            3. 自動修正因多個工作表導致的資料跑版問題。
+            3. <strong>上傳後下方會顯示詳細清單供您核對。</strong>
         </div>
 
         <div class="form-group">
@@ -55,6 +64,24 @@
         <button id="uploadBtn" onclick="processExcel()">🚀 開始分析並上傳</button>
         <div id="status"></div>
         <div id="log" class="log-box"></div>
+    </div>
+
+    <div id="resultArea" class="card">
+        <h3>📋 值班人員清單預覽</h3>
+        <p style="color: #666; font-size: 0.9em;">請確認以下日期與人員是否正確：</p>
+        <div class="table-container">
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>姓名</th>
+                        <th>班別代碼</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    </tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -75,10 +102,15 @@
 
         async function processExcel() {
             const fileInput = document.getElementById('fileInput');
-            const targetMonthInput = document.getElementById('targetMonth'); // 取得月份選擇器
+            const targetMonthInput = document.getElementById('targetMonth');
             const status = document.getElementById('status');
             const btn = document.getElementById('uploadBtn');
             const logBox = document.getElementById('log');
+            const resultArea = document.getElementById('resultArea'); // 取得結果區塊
+            
+            // 重置畫面
+            resultArea.style.display = 'none'; 
+            status.innerText = '';
             
             if(!fileInput.files.length) { status.innerText = '❌ 請先選擇 Excel 檔案 (.xlsx)'; return; }
             
@@ -94,15 +126,14 @@
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, {type: 'array'});
                     
-                    let validSheets = []; // 儲存所有分析出的有效月份 Sheet
+                    let validSheets = [];
 
-                    // 1. 先掃描所有 Sheet，搜集資訊
+                    // 1. 先掃描所有 Sheet
                     workbook.SheetNames.forEach(sheetName => {
                         const sheet = workbook.Sheets[sheetName];
                         const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
                         if (rows.length < 5) return;
 
-                        // 讀取 A1 標題
                         const titleCell = rows[0][0];
                         if (!titleCell || typeof titleCell !== 'string') return;
 
@@ -114,7 +145,7 @@
                                 sheetName: sheetName,
                                 year: year,
                                 month: month,
-                                sortKey: parseInt(year + month), // 用於排序 (e.g. 202512)
+                                sortKey: parseInt(year + month),
                                 rows: rows
                             });
                         }
@@ -126,36 +157,31 @@
 
                     // 2. 決定要處理哪一個 Sheet
                     let targetSheet = null;
-                    const userSelectedMonth = targetMonthInput.value; // 格式: "2025-12"
+                    const userSelectedMonth = targetMonthInput.value;
 
                     if (userSelectedMonth) {
-                        // 情況 A: 使用者有指定月份
                         const [uYear, uMonth] = userSelectedMonth.split('-');
                         targetSheet = validSheets.find(s => s.year === uYear && s.month === uMonth);
                         
                         if (!targetSheet) {
-                            throw new Error(`檔案中找不到對應 ${uYear}年${uMonth}月 的工作表。找到的月份有：${validSheets.map(s => `${s.year}-${s.month}`).join(', ')}`);
+                            throw new Error(`檔案中找不到對應 ${uYear}年${uMonth}月 的工作表。`);
                         }
-                        log(`🎯 使用者指定處理：${targetSheet.year}年${targetSheet.month}月 (Sheet: ${targetSheet.sheetName})`);
+                        log(`🎯 使用者指定處理：${targetSheet.year}年${targetSheet.month}月`);
                     } else {
-                        // 情況 B: 自動抓最新的 (SortKey 最大)
                         validSheets.sort((a, b) => b.sortKey - a.sortKey);
                         targetSheet = validSheets[0];
-                        log(`🤖 自動選擇最新月份：${targetSheet.year}年${targetSheet.month}月 (Sheet: ${targetSheet.sheetName})`);
+                        log(`🤖 自動選擇最新月份：${targetSheet.year}年${targetSheet.month}月`);
                     }
 
-                    // 3. 開始解析選定的 Sheet
+                    // 3. 開始解析
                     let allInsertData = [];
                     const rows = targetSheet.rows;
                     const year = targetSheet.year;
                     const month = targetSheet.month;
-
-                    // 定位日期列 (Row Index 2 => Excel 第3列)
                     const dayRowIndex = 2;
                     const dayRow = rows[dayRowIndex];
                     if (!dayRow) throw new Error("找不到日期列 (Excel 第3列)");
 
-                    // 建立 Column Index -> 日期字串 的對照表
                     let colToDateMap = {}; 
                     for (let c = 1; c < dayRow.length; c++) {
                         const dayVal = dayRow[c];
@@ -165,16 +191,13 @@
                         }
                     }
 
-                    // 遍歷人員列 (從 Row Index 4 => Excel 第5列 開始)
                     for (let r = 4; r < rows.length; r++) {
                         const row = rows[r];
-                        const staffName = row[0]; // A欄姓名
+                        const staffName = row[0];
 
-                        // 過濾無效列
                         if (!staffName || typeof staffName !== 'string') continue;
                         if (staffName.trim().startsWith('*') || staffName.includes('主管') || staffName.length > 8) continue;
 
-                        // 檢查每一天的排班
                         for (let c in colToDateMap) {
                             const cellValue = row[c];
                             const dateStr = colToDateMap[c];
@@ -198,14 +221,17 @@
                         return;
                     }
 
+                    // --- 渲染表格 (新增的功能) ---
+                    renderTable(allInsertData);
+                    // ---------------------------
+
                     status.innerText = `📊 分析完成！\n📅 月份：${year}-${month}\n📝 筆數：${allInsertData.length} 筆\n🚀 正在寫入資料庫...`;
                     
-                    // 批次寫入 Supabase
                     const { error } = await supabase.from('duty_roster').insert(allInsertData);
                     
                     if(error) throw error;
                     
-                    status.innerHTML = `<span style="color:#198754; font-size:1.1em;">✅ 上傳成功！已匯入 ${year}年${month}月 共 ${allInsertData.length} 筆資料。</span>`;
+                    status.innerHTML = `<span style="color:#198754; font-size:1.1em;">✅ 上傳成功！已匯入 ${year}年${month}月 共 ${allInsertData.length} 筆資料。</span><br>請查看下方表格確認內容。`;
                     log('✅ 資料庫寫入完畢。');
 
                 } catch(err) {
@@ -218,6 +244,32 @@
             };
             
             reader.readAsArrayBuffer(file);
+        }
+
+        // 新增：繪製表格的函數
+        function renderTable(data) {
+            const resultArea = document.getElementById('resultArea');
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = ''; // 清空舊資料
+
+            // 根據日期排序，讓表格看起來比較順
+            data.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.date}</td>
+                    <td style="font-weight:bold;">${item.staff_name}</td>
+                    <td><span class="tag-shift">${item.shift}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // 顯示區域
+            resultArea.style.display = 'block';
+            
+            // 自動捲動到表格區域，方便使用者查看
+            resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     </script>
 </body>
