@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>病歷辨識 (抗陰影增強版)</title>
+    <title>病歷辨識 (彩色高畫質版)</title>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.js"></script>
     
@@ -13,18 +13,24 @@
         h2 { margin: 0 0 15px 0; color: #1a73e8; font-size: 1.3rem; text-align: center; }
         
         .status-box { background: #e8f0fe; color: #1557b0; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; text-align: center; border: 1px solid #d2e3fc; font-weight: bold;}
-        
-        /* 雙按鈕 */
+        .error-box { background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; text-align: left; font-size: 14px; border: 1px solid #fecaca; word-break: break-all;}
+
+        .progress-wrapper { margin: 15px 0; display: none; }
+        .progress-bar { width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; background: #28a745; transition: width 0.3s; }
+        .progress-text { font-size: 12px; color: #666; margin-top: 5px; text-align: center; }
+
         .action-group { display: flex; gap: 12px; margin-top: 20px; }
         .btn-action { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .btn-camera { background: linear-gradient(135deg, #28a745, #218838); }
         .btn-gallery { background: linear-gradient(135deg, #ffc107, #e0a800); color: #333; }
-        .btn-disabled { background: #ccc; cursor: not-allowed; pointer-events: none; }
+        .btn-disabled { background: #ccc; cursor: not-allowed; box-shadow: none; color: #666; pointer-events: none; }
 
         .btn-back { display:inline-block; margin-bottom:15px; text-decoration:none; color:#666; font-size:14px; padding: 6px 12px; border: 1px solid #ddd; border-radius: 20px; background: white;}
 
         .preview-area { margin-top: 15px; text-align: center; display: none; }
-        canvas { max-width: 100%; border-radius: 8px; border: 1px solid #333; }
+        /* 讓預覽圖維持原色 */
+        #preview-img { max-width: 100%; border-radius: 8px; border: 1px solid #333; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; }
         th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; font-size: 16px; }
@@ -37,11 +43,12 @@
 <a href="menu.html" class="btn-back">⬅ 回選單</a>
 
 <div class="card">
-    <h2>📷 病歷辨識 (抗陰影版)</h2>
+    <h2>📷 病歷辨識 (彩色高畫質)</h2>
     
     <div id="statusBox" class="status-box">
-        🚀 準備就緒 (請確認 GitHub 字庫已上傳)
+        🚀 系統待命 (使用彩色原圖辨識)
     </div>
+    <div id="errorBox" class="error-box"></div>
 
     <div class="action-group">
         <button id="btnCam" class="btn-action btn-camera" onclick="startOCR('camera')">
@@ -55,9 +62,13 @@
     <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="processImage(this)">
     <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="processImage(this)">
 
+    <div class="progress-wrapper" id="pWrapper">
+        <div class="progress-bar"><div class="progress-fill" id="pFill"></div></div>
+        <div class="progress-text" id="pText">準備中...</div>
+    </div>
+
     <div class="preview-area" id="previewArea">
-        <p style="font-size:12px; color:#999; margin:5px 0;">影像處理預覽 (保留灰階細節)↓</p>
-        <canvas id="processCanvas"></canvas>
+        <img id="preview-img">
     </div>
 
     <div id="resultArea" style="display:none; margin-top:20px;">
@@ -89,18 +100,32 @@
         const btns = document.querySelectorAll('.btn-action');
         btns.forEach(b => b.classList.add('btn-disabled'));
         document.getElementById('resultArea').style.display = 'none';
+        document.getElementById('errorBox').style.display = 'none';
+        document.getElementById('pWrapper').style.display = 'block';
         
         try {
-            updateStatus("處理圖片陰影...");
-            const canvas = document.getElementById('processCanvas');
-            await imageProcessing(file, canvas);
+            updateStatus("處理圖片 (保持彩色高解析)...");
+            
+            // 1. 圖片壓縮 (但保持高解析度)
+            // 修改：解析度提高到 1800px，保留色彩
+            const options = { 
+                maxSizeMB: 2,          // 允許稍微大一點的檔案
+                maxWidthOrHeight: 1800, // 🔥 關鍵：提高解析度以看清數字
+                useWebWorker: true 
+            };
+            const compressedFile = await imageCompression(file, options);
+            
+            // 顯示預覽
+            const img = document.getElementById('preview-img');
+            img.src = URL.createObjectURL(compressedFile);
             document.getElementById('previewArea').style.display = 'block';
 
-            await runTesseract(canvas);
+            await runTesseract(compressedFile);
 
         } catch (err) {
             console.error(err);
-            alert("錯誤：" + err.message);
+            document.getElementById('errorBox').style.display = 'block';
+            document.getElementById('errorBox').innerText = `錯誤：${err.message}`;
             updateStatus("❌ 發生錯誤");
         } finally {
             btns.forEach(b => b.classList.remove('btn-disabled'));
@@ -108,51 +133,22 @@
         input.value = '';
     }
 
-    // 🔥 重點修改：只做縮放和輕微對比度調整，不做暴力二值化
-    function imageProcessing(file, canvas) {
-        return new Promise((resolve) => {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => {
-                const maxWidth = 1000; // 稍微提高解析度以辨識表格
-                const scale = maxWidth / img.width;
-                canvas.width = maxWidth;
-                canvas.height = img.height * scale;
-                
-                // 1. 繪製原圖
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                // 2. 轉灰階 (但不轉黑白)
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                
-                for (let i = 0; i < data.length; i += 4) {
-                    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                    // 簡單的對比度增強，但保留灰階過渡，避免陰影變全黑
-                    let color = avg;
-                    if (color > 150) color = 255; // 把淺灰背景變白
-                    // 深色字體和陰影保留原樣，讓 OCR 引擎自己去切分
-                    
-                    data[i] = color;
-                    data[i + 1] = color;
-                    data[i + 2] = color;
-                }
-                ctx.putImageData(imageData, 0, 0);
-                resolve();
-            };
-            img.src = URL.createObjectURL(file);
-        });
-    }
+    async function runTesseract(imageFile) {
+        const pFill = document.getElementById('pFill');
+        const pText = document.getElementById('pText');
 
-    async function runTesseract(canvasElement) {
-        updateStatus("啟動 Tesseract v5...");
+        updateStatus("建立辨識核心...");
         
         const worker = await Tesseract.createWorker({
-            langPath: './', 
-            gzip: false, 
+            langPath: './',    
+            gzip: false,       
             logger: m => {
                 if (m.status === 'recognizing text') {
-                    updateStatus(`辨識中... ${Math.floor(m.progress * 100)}%`);
+                    pFill.style.width = (m.progress * 100) + '%';
+                    pText.innerText = `辨識中... ${Math.floor(m.progress * 100)}%`;
+                } else if (m.status.includes('loading')) {
+                    updateStatus("讀取本地字庫...");
+                    pText.innerText = "載入模型 (chi_tra)...";
                 }
             }
         });
@@ -160,19 +156,20 @@
         await worker.loadLanguage('chi_tra');
         await worker.initialize('chi_tra');
         
-        // 設定參數：只允許數字和繁體中文，並嘗試保留表格結構
+        // 設定白名單 (只辨識這些字)
         await worker.setParameters({
             tessedit_char_whitelist: '0123456789林陳李黃張王吳劉蔡楊許鄭謝郭洪曾邱廖賴周徐蘇葉莊呂江何蕭羅高潘簡朱鍾彭游詹胡施沈余盧梁趙顏柯孫魏翁戴范宋鄧杜侯曹薛傅丁温紀蔣歐藍連馬董古湯閻簡不知山水木土金火日月齊全資料新收案可黎楚軒馨勝見香如寶珠|',
-            tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT, // 針對稀疏文字(表格)的最佳模式
+            tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT, // 表格模式
         });
 
-        const { data: { text } } = await worker.recognize(canvasElement);
+        const { data: { text } } = await worker.recognize(imageFile);
         await worker.terminate();
 
         updateStatus("✅ 完成！");
         const data = parseData(text);
         renderTable(data);
         document.getElementById('resultArea').style.display = 'block';
+        document.getElementById('pWrapper').style.display = 'none';
     }
 
     function updateStatus(msg) {
@@ -180,42 +177,38 @@
     }
 
     function parseData(text) {
-        // 先移除掉所有空白，變成一長串字元，再來切
-        // 因為表格線 | 常常會把數字切斷
         const lines = text.split(/\r?\n/);
         const data = [];
-        const noise = ['病歷', '姓名', '複診', '收案', '醫師', '確認', '日期', '上午', '下午', '單內', '合併', '註記', '資料', '齊全'];
+        const noise = ['病歷', '姓名', '複診', '收案', '醫師', '確認', '日期', '上午', '下午', '單內', '合併', '註記', '資料', '齊全', '號', '診', '早', '午', '晚'];
 
         lines.forEach(line => {
-            // 移除所有空格
+            // 移除空白
             let clean = line.replace(/\s+/g, '');
-            // 把 | 換成空字串
-            clean = clean.replace(/\|/g, ''); 
+            // 把 | 換成空白，避免干擾
+            clean = clean.replace(/\|/g, '');
             
             if (clean.length < 4) return;
 
             // 抓取 5-8 位數字
             const mrnMatch = clean.match(/(\d{5,8})/);
             
-            // 抓取中文姓名 (2-4個字)
-            // 排除掉常見的標題字
+            // 抓取中文姓名
             const nameMatch = clean.match(/[\u4e00-\u9fa5]{2,4}/g);
 
             if (mrnMatch) {
                 let validName = '';
                 if (nameMatch) {
-                    // 找出不包含雜訊詞的姓名
                     for (let name of nameMatch) {
                         if (!noise.some(bad => name.includes(bad))) {
                             validName = name;
-                            break; // 找到第一個像名字的就停
+                            break;
                         }
                     }
                 }
                 
-                // 只有當名字和病歷號都抓到才算成功 (或者您可以放寬標準)
-                if (validName) {
-                    data.push({ mrn: mrnMatch[0], name: validName });
+                // 只要有病歷號就顯示
+                if (mrnMatch[0]) {
+                    data.push({ mrn: mrnMatch[0], name: validName || '' });
                 }
             }
         });
@@ -226,7 +219,7 @@
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" style="color:red;text-align:center;">⚠️ 未偵測到有效資料<br>請確認照片方向正確</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="color:red;text-align:center;">⚠️ 未偵測到有效資料<br>請確認照片方向正確且無反光</td></tr>';
             return;
         }
         data.forEach(r => {
