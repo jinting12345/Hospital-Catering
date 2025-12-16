@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>病歷辨識 (標準版+自動連線)</title>
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
+    <title>病歷辨識 (色彩偵測+畫質增強)</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; padding: 15px; max-width: 600px; margin: 0 auto; }
@@ -19,19 +19,12 @@
         .btn-camera { background: linear-gradient(135deg, #28a745, #218838); }
         .btn-gallery { background: linear-gradient(135deg, #f39c12, #d35400); }
         
-        .btn-ocr { width: 100%; margin-top: 15px; background: linear-gradient(135deg, #2980b9, #2c3e50); padding: 15px; font-size: 18px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
-        .btn-ocr:disabled { background: #ccc; cursor: not-allowed; }
-
         .btn-back { display:inline-block; margin-bottom:15px; text-decoration:none; color:#666; font-size:14px; padding: 6px 12px; border: 1px solid #ddd; border-radius: 20px; background: white;}
 
-        /* 影像編輯區 */
-        .editor-area { display: none; margin-top: 20px; background: #fafafa; padding: 15px; border-radius: 10px; border: 1px solid #eee; }
-        canvas { max-width: 100%; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 15px; }
-        
-        .slider-group { margin-bottom: 15px; }
-        .slider-label { display: flex; justify-content: space-between; font-size: 14px; color: #555; font-weight: bold; margin-bottom: 5px; }
-        input[type=range] { width: 100%; height: 6px; background: #ddd; border-radius: 5px; outline: none; -webkit-appearance: none; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #1a73e8; border-radius: 50%; cursor: pointer; }
+        /* 預覽區 */
+        .preview-area { margin-top: 15px; display: none; text-align: center;}
+        .preview-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+        canvas { max-width: 100%; border-radius: 8px; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 
         /* 結果表格 */
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; }
@@ -39,6 +32,11 @@
         th { background-color: #f8fafc; color: #64748b; font-size: 14px; }
         input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; color: #333; }
         
+        /* 螢光筆標籤 */
+        .tag { font-size: 12px; padding: 2px 6px; border-radius: 4px; color: #fff; margin-left: 5px; display: inline-block; vertical-align: middle; font-weight: normal;}
+        .tag-orange { background: #ff9800; border: 1px solid #e65100; }
+        .tag-yellow { background: #fff176; color: #333; border: 1px solid #fdd835; }
+
         .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-right:5px;}
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -48,18 +46,18 @@
 <a href="menu.html" class="btn-back">⬅ 回選單</a>
 
 <div class="card">
-    <h2>📷 病歷辨識 (標準版)</h2>
+    <h2>📷 病歷辨識 (Pro Max)</h2>
     
     <div id="statusBox" class="status-box">
-        準備就緒 (將自動連接雲端字庫)
+        💡 系統將自動放大增強畫質 (請使用輕量字庫)
     </div>
     <div id="errorBox" class="error-box"></div>
 
     <div class="action-group">
-        <button class="btn-action btn-camera" onclick="document.getElementById('cameraInput').click()">
+        <button id="btnCam" class="btn-action btn-camera" onclick="startProcess('camera')">
             📸 拍照
         </button>
-        <button class="btn-action btn-gallery" onclick="document.getElementById('galleryInput').click()">
+        <button id="btnGal" class="btn-action btn-gallery" onclick="startProcess('gallery')">
             🖼️ 選照片
         </button>
     </div>
@@ -67,23 +65,18 @@
     <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="loadFile(this)">
     <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="loadFile(this)">
 
-    <div class="editor-area" id="editorArea">
+    <div class="preview-area" id="previewArea">
+        <div class="preview-label">👇 處理後影像 (放大2倍+色彩標記) 👇</div>
         <canvas id="processCanvas"></canvas>
-        
-        <div class="slider-group">
-            <div class="slider-label"><span>🌑 文字加深 (閾值)</span> <span id="threshVal">128</span></div>
-            <input type="range" id="threshRange" min="0" max="255" value="128" oninput="applyFilter()">
-            <div style="font-size:12px; color:#888; margin-top:5px;">💡 調整至文字清晰、背景全白</div>
-        </div>
-
-        <button class="btn-ocr" onclick="runOCR()">🚀 開始辨識</button>
     </div>
+    
+    <div class="debug-area" id="debugText" style="display:none; margin-top:10px; font-size:10px; color:#999; height:50px; overflow:auto;"></div>
 
     <div id="resultArea" style="display:none; margin-top:20px;">
         <h3 style="margin:0 0 10px 0; color:#333; font-size:16px;">✅ 辨識結果</h3>
         <table id="resultTable">
             <thead>
-                <tr><th width="35%">病歷號</th><th width="50%">姓名</th><th width="15%"></th></tr>
+                <tr><th width="35%">病歷號</th><th width="65%">姓名</th></tr>
             </thead>
             <tbody id="tableBody"></tbody>
         </table>
@@ -95,128 +88,184 @@
 </div>
 
 <script>
-    let originalImage = null;
+    let highlighterMap = []; // 儲存顏色位置
+
+    async function startProcess(type) {
+        if (type === 'camera') document.getElementById('cameraInput').click();
+        else document.getElementById('galleryInput').click();
+    }
 
     function loadFile(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
         
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = new Image();
-            img.onload = function() {
-                originalImage = img;
-                document.getElementById('editorArea').style.display = 'block';
-                document.getElementById('resultArea').style.display = 'none';
-                document.getElementById('statusBox').innerText = "💡 系統已自動優化邊緣，請確認文字清晰度";
-                applyFilter(); // 初次渲染
-            }
-            img.src = e.target.result;
-        }
-        reader.readAsDataURL(file);
+        const btns = document.querySelectorAll('.btn-action');
+        btns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+        document.getElementById('resultArea').style.display = 'none';
+        document.getElementById('errorBox').style.display = 'none';
+        
+        document.getElementById('statusBox').innerHTML = '<div class="loader"></div> 1. 影像優化與色彩分析...';
+
+        setTimeout(() => {
+            processAndRecognize(file);
+        }, 100);
         input.value = '';
     }
 
-    // 影像處理：縮放 + 補白邊 + 二值化
-    function applyFilter() {
-        if (!originalImage) return;
-        const canvas = document.getElementById('processCanvas');
-        const ctx = canvas.getContext('2d');
-        const threshVal = parseInt(document.getElementById('threshRange').value);
-        document.getElementById('threshVal').innerText = threshVal;
-
-        // 1. 設定尺寸 (解析度設為 1000px 以保證標準版辨識率)
-        const targetWidth = 1000;
-        const scale = targetWidth / originalImage.width;
-        const targetHeight = originalImage.height * scale;
-        
-        // 2. 增加白邊 (Padding) - 關鍵！防止邊緣文字被切掉
-        const padding = 20; 
-        canvas.width = targetWidth + (padding * 2);
-        canvas.height = targetHeight + (padding * 2);
-
-        // 3. 填滿白色背景
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // 4. 繪製圖片 (置中)
-        ctx.drawImage(originalImage, padding, padding, targetWidth, targetHeight);
-
-        // 5. 像素處理 (二值化)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-            // 轉灰階
-            const gray = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
-            // 二值化
-            const val = gray < threshVal ? 0 : 255;
-            data[i] = data[i+1] = data[i+2] = val;
-        }
-        ctx.putImageData(imageData, 0, 0);
-    }
-
-    async function runOCR() {
-        const status = document.getElementById('statusBox');
-        const canvas = document.getElementById('processCanvas');
-        const btn = document.querySelector('.btn-ocr');
-        
-        btn.disabled = true;
-        // 第一次需要下載 25MB，請耐心等待
-        status.innerHTML = '<div class="loader"></div> 正在連線下載標準版核心 (25MB)...';
-
+    async function processAndRecognize(file) {
         try {
-            const worker = Tesseract.createWorker({
-                // 🔥 關鍵：指向 jsDelivr 高速 CDN 的標準版路徑
-                langPath: 'https://cdn.jsdelivr.net/gh/naptha/tessdata@gh-pages/4.0.0/', 
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        status.innerHTML = `<div class="loader"></div> 辨識中... ${Math.floor(m.progress * 100)}%`;
-                    } else if (m.status.includes('loading')) {
-                        // 顯示下載進度提示
-                        status.innerHTML = `<div class="loader"></div> 首次需下載大腦 (請保持網路暢通)...`;
-                    }
-                }
-            });
-
-            await worker.load();
-            await worker.loadLanguage('chi_tra');
-            await worker.initialize('chi_tra');
+            const canvas = document.getElementById('processCanvas');
             
-            // 設定參數 (標準版模型 + 寬鬆白名單)
-            await worker.setParameters({
-                tessedit_char_whitelist: '0123456789林陳李黃張王吳劉蔡楊許鄭謝郭洪曾邱廖賴周徐蘇葉莊呂江何蕭羅高潘簡朱鍾彭游詹胡施沈余盧梁趙顏柯孫魏翁戴范宋鄧杜侯曹薛傅丁温紀蔣歐藍連馬董古湯閻簡不知山水木土金火日月齊全資料新收案可複診',
-                tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT, 
-            });
+            // 1. 影像處理：偵測顏色 + 放大 2 倍 + 增強對比
+            // 這是讓輕量版變聰明的關鍵！
+            await enhanceImageAndDetectColor(file, canvas);
+            document.getElementById('previewArea').style.display = 'block';
 
-            const { data: { text } } = await worker.recognize(canvas);
-            await worker.terminate();
-
-            status.innerText = "✅ 完成！";
-            const data = parseData(text);
-            renderTable(data);
-            document.getElementById('resultArea').style.display = 'block';
+            // 2. 執行 OCR
+            document.getElementById('statusBox').innerHTML = '<div class="loader"></div> 2. 載入輕量核心辨識中...';
+            await runTesseract(canvas);
 
         } catch (err) {
             console.error(err);
-            document.getElementById('errorBox').style.display = 'block';
-            document.getElementById('errorBox').innerHTML = `<strong>連線錯誤：</strong>${err.message}<br>請確認手機網路是否通暢 (需下載 25MB)`;
-            status.innerText = "❌ 失敗";
+            showError(`錯誤：${err.message}<br>請確認 GitHub 上是 3MB 的 chi_tra.traineddata.gz`);
         } finally {
-            btn.disabled = false;
+            const btns = document.querySelectorAll('.btn-action');
+            btns.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
         }
     }
 
-    function parseData(text) {
-        const lines = text.split(/\r?\n/);
-        const data = [];
+    // 🔥 核心技術：Super Resolution + Color Detection
+    function enhanceImageAndDetectColor(file, canvas) {
+        return new Promise((resolve) => {
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+                // 1. 放大圖片 (Upscale) - 讓字變大，輕量版才看得懂！
+                // 限制最大寬度 1600 (原本是 800)
+                const targetWidth = 1600; 
+                const scale = targetWidth / img.width;
+                canvas.width = targetWidth;
+                canvas.height = img.height * scale;
+                
+                // 繪製原始圖片
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                // 重置顏色地圖 (縮小比例對應，節省記憶體)
+                highlighterMap = new Array(height).fill(null);
+
+                // 2. 像素處理迴圈
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    
+                    // --- A. 色彩偵測 ---
+                    // 每行只偵測一次 (優化效能)
+                    const x = (i / 4) % width;
+                    const y = Math.floor((i / 4) / width);
+                    
+                    // 每 10 點取樣一次
+                    if (x % 10 === 0) {
+                        // 判斷橘色/黃色 (螢光筆特徵：飽和度高，亮度高)
+                        // 黃色: R高, G高, B低
+                        if (r > 200 && g > 200 && b < 150) {
+                            highlighterMap[y] = 'yellow';
+                        }
+                        // 橘色: R高, G中, B低
+                        else if (r > 220 && g > 120 && g < 200 && b < 100) {
+                            highlighterMap[y] = 'orange';
+                        }
+                    }
+
+                    // --- B. 影像增強 (轉灰階 + 增強對比) ---
+                    // 轉灰階
+                    let gray = r * 0.299 + g * 0.587 + b * 0.114;
+                    
+                    // 增強對比 (Contrast Stretching)
+                    // 讓淺灰變白，深灰變黑
+                    gray = (gray - 100) * 1.8; 
+                    
+                    if (gray > 255) gray = 255;
+                    if (gray < 0) gray = 0;
+                    
+                    data[i] = data[i+1] = data[i+2] = gray;
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                resolve();
+            };
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    async function runTesseract(canvas) {
+        const worker = await Tesseract.createWorker({
+            langPath: './', 
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    document.getElementById('statusBox').innerHTML = `<div class="loader"></div> 辨識中... ${Math.floor(m.progress * 100)}%`;
+                }
+            }
+        });
+
+        await worker.loadLanguage('chi_tra');
+        await worker.initialize('chi_tra');
+        
+        // 白名單 + 頁面模式 (SPARSE_TEXT 適合稀疏的表格)
+        await worker.setParameters({
+            tessedit_char_whitelist: '0123456789林陳李黃張王吳劉蔡楊許鄭謝郭洪曾邱廖賴周徐蘇葉莊呂江何蕭羅高潘簡朱鍾彭游詹胡施沈余盧梁趙顏柯孫魏翁戴范宋鄧杜侯曹薛傅丁温紀蔣歐藍連馬董古湯閻簡不知山水木土金火日月齊全資料新收案可複診',
+            tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT, 
+        });
+
+        const { data } = await worker.recognize(canvas);
+        await worker.terminate();
+
+        document.getElementById('statusBox').innerText = "✅ 完成！";
+        
+        // Debug 顯示
+        document.getElementById('debugText').innerText = "Raw: " + data.text;
+        document.getElementById('debugText').style.display = 'block';
+
+        const parsedData = parseDataWithColor(data);
+        renderTable(parsedData);
+        document.getElementById('resultArea').style.display = 'block';
+    }
+
+    function parseDataWithColor(ocrData) {
+        const lines = ocrData.lines;
+        const results = [];
         const noise = ['病歷', '姓名', '複診', '收案', '醫師', '確認', '日期', '上午', '下午', '單內', '合併', '註記', '11412'];
 
         lines.forEach(line => {
-            const clean = line.replace(/\s+/g, '').trim(); 
-            if (clean.length < 5) return;
-            const mrnMatch = clean.match(/(\d{5,8})/);
-            const nameMatch = clean.match(/[\u4e00-\u9fa5]{2,4}/);
+            const text = line.text.replace(/\s+/g, '').trim();
+            if (text.length < 5) return;
+
+            // 找出這行字的 Y 軸中心
+            const centerY = Math.floor((line.bbox.y0 + line.bbox.y1) / 2);
+            
+            // 檢查該高度是否有顏色標記 (寬容度 +/- 15px)
+            let color = null;
+            let range = 15;
+            // 統計區間內哪種顏色最多
+            let yCount = 0, oCount = 0;
+            
+            for(let y = centerY - range; y < centerY + range; y++) {
+                if(y >= 0 && y < highlighterMap.length) {
+                    if(highlighterMap[y] === 'yellow') yCount++;
+                    if(highlighterMap[y] === 'orange') oCount++;
+                }
+            }
+            
+            if (yCount > 5) color = 'yellow';
+            else if (oCount > 5) color = 'orange';
+
+            const mrnMatch = text.match(/(\d{5,8})/);
+            const nameMatch = text.match(/[\u4e00-\u9fa5]{2,4}/);
 
             if (mrnMatch) {
                 let name = '';
@@ -224,31 +273,50 @@
                     const candidate = nameMatch[0];
                     if (!noise.some(bad => candidate.includes(bad))) { name = candidate; }
                 }
-                data.push({ mrn: mrnMatch[0], name: name });
+                results.push({ mrn: mrnMatch[0], name: name, color: color });
             }
         });
-        return data;
+        return results;
     }
 
     function renderTable(data) {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
-        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="color:red;text-align:center;">⚠️ 未偵測到資料</td></tr>'; return; }
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="2" style="color:red;text-align:center;">⚠️ 未偵測到資料 (請嘗試拉近拍攝)</td></tr>'; return; }
+        
         data.forEach(r => {
+            let colorTag = '';
+            // 根據偵測到的顏色顯示標籤
+            if (r.color === 'orange') colorTag = '<span class="tag tag-orange">橘色</span>';
+            if (r.color === 'yellow') colorTag = '<span class="tag tag-yellow">黃色</span>';
+
             tbody.innerHTML += `<tr>
                 <td><input type="text" value="${r.mrn}"></td>
-                <td><input type="text" value="${r.name}"></td>
-                <td onclick="this.parentElement.remove()" style="text-align:center;font-size:1.2em;color:red;">×</td>
+                <td>
+                    <div style="display:flex; align-items:center;">
+                        <input type="text" value="${r.name}" style="flex:1;">
+                        ${colorTag}
+                    </div>
+                </td>
             </tr>`;
         });
+    }
+
+    function showError(msg) {
+        const box = document.getElementById('errorBox');
+        box.style.display = 'block';
+        box.innerHTML = msg;
+        document.getElementById('statusBox').innerText = "❌ 失敗";
     }
 
     function copyResult() {
         const rows = document.querySelectorAll('#tableBody tr');
         let txt = "";
         rows.forEach(r => {
-            const i = r.querySelectorAll('input');
-            if(i.length) txt += `${i[0].value}\t${i[1].value}\n`;
+            const inputs = r.querySelectorAll('input');
+            const tag = r.querySelector('.tag');
+            let color = tag ? tag.innerText : "";
+            if(inputs.length) txt += `${inputs[0].value}\t${inputs[1].value}\t${color}\n`;
         });
         if(txt) navigator.clipboard.writeText(txt).then(()=>alert("✅ 已複製")).catch(()=>alert("❌ 複製失敗"));
     }
