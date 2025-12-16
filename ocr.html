@@ -3,46 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>病歷單辨識 (極速版)</title>
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.js"></script>
+    <title>病歷辨識 (本地黑白版)</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
     
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; padding: 15px; max-width: 600px; margin: 0 auto; }
-        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
-        h2 { margin: 0 0 15px 0; color: #1a73e8; font-size: 1.3rem; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        h2 { margin: 0 0 15px 0; color: #333; font-size: 1.3rem; text-align: center; }
         
-        /* 狀態區 */
-        .status-box { background: #e8f0fe; color: #1557b0; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; border: 1px solid #d2e3fc; display: flex; align-items: center; justify-content: center; gap: 8px;}
-        .error-box { background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; text-align: left; font-size: 14px; border: 1px solid #fecaca; }
-
-        /* 進度條 */
-        .progress-wrapper { margin: 15px 0; display: none; }
-        .progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; width: 0%; background: #28a745; transition: width 0.3s; }
-        .progress-text { font-size: 12px; color: #666; margin-top: 5px; }
-
-        /* 雙按鈕設計 */
+        .status-box { background: #fff3cd; color: #856404; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; border: 1px solid #ffeeba; text-align: center; }
+        
+        /* 雙按鈕 */
         .action-group { display: flex; gap: 12px; margin-top: 20px; }
-        .btn-action { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.1s; }
-        .btn-action:active { transform: scale(0.98); }
-        
-        /* 綠色拍照按鈕 */
+        .btn-action { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .btn-camera { background: linear-gradient(135deg, #28a745, #218838); }
-        /* 黃色選圖按鈕 */
-        .btn-gallery { background: linear-gradient(135deg, #ffc107, #e0a800); color: #333; }
-        /* 灰色禁用狀態 */
-        .btn-disabled { background: #ccc; cursor: not-allowed; box-shadow: none; color: #666; }
+        .btn-gallery { background: linear-gradient(135deg, #0d6efd, #0b5ed7); }
+        .btn-disabled { background: #ccc; cursor: not-allowed; pointer-events: none; }
 
         .btn-back { display:inline-block; margin-bottom:15px; text-decoration:none; color:#666; font-size:14px; padding: 6px 12px; border: 1px solid #ddd; border-radius: 20px; background: white;}
-
-        #preview-img { max-width: 100%; border-radius: 8px; margin-top: 15px; display: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #eee; }
         
+        /* 預覽與黑白處理區 */
+        .preview-area { margin-top: 15px; text-align: center; display: none; }
+        canvas { max-width: 100%; border-radius: 8px; border: 1px solid #ccc; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        /* 進度條 */
+        .progress-bar { height: 6px; background: #e9ecef; margin-top: 10px; border-radius: 3px; overflow: hidden; display: none; }
+        .progress-fill { height: 100%; width: 0%; background: #0d6efd; transition: width 0.3s; }
+
         /* 結果表格 */
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; }
-        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; font-size: 15px; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; font-size: 16px; }
         th { background-color: #f8fafc; color: #64748b; font-size: 14px; }
         input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; color: #333; }
+        
+        .log-text { font-size: 12px; color: #666; margin-top: 5px; text-align: center; min-height: 18px;}
     </style>
 </head>
 <body>
@@ -50,37 +44,34 @@
 <a href="menu.html" class="btn-back">⬅ 回選單</a>
 
 <div class="card">
-    <h2>📷 病歷辨識 (輕量版)</h2>
+    <h2>📷 病歷辨識 (本地黑白版)</h2>
     
     <div id="statusBox" class="status-box">
-        <span>💤</span> 系統待命 (首次需下載 3MB)
-    </div>
-    
-    <div id="errorBox" class="error-box"></div>
-
-    <div class="progress-wrapper" id="pWrapper">
-        <div class="progress-bar"><div class="progress-fill" id="pFill"></div></div>
-        <div class="progress-text" id="pText">準備中...</div>
+        💡 此模式在手機執行，請確保光線充足
     </div>
 
-    <div class="action-group">
-        <button id="btnCam" class="btn-action btn-camera" onclick="startOCR('camera')">
-            <span style="font-size:24px">📸</span>
-            拍 照
+    <div class="action-group" id="btnGroup">
+        <button class="btn-action btn-camera" onclick="document.getElementById('cameraInput').click()">
+            <span style="font-size:24px">📸</span> 拍 照
         </button>
-        <button id="btnGal" class="btn-action btn-gallery" onclick="startOCR('gallery')">
-            <span style="font-size:24px">🖼️</span>
-            選照片
+        <button class="btn-action btn-gallery" onclick="document.getElementById('galleryInput').click()">
+            <span style="font-size:24px">🖼️</span> 選照片
         </button>
     </div>
     
-    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="processFile(this)">
-    <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="processFile(this)">
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="processImage(this)">
+    <input type="file" id="galleryInput" accept="image/*" style="display:none" onchange="processImage(this)">
 
-    <img id="preview-img">
+    <div class="progress-bar" id="pBar"><div class="progress-fill" id="pFill"></div></div>
+    <div class="log-text" id="logText"></div>
+
+    <div class="preview-area" id="previewArea">
+        <p style="font-size:12px; color:#999; margin:5px 0;">系統已將圖片轉為黑白以加速運算↓</p>
+        <canvas id="processCanvas"></canvas>
+    </div>
 
     <div id="resultArea" style="display:none; margin-top:20px;">
-        <h3 style="margin:0 0 10px 0; color:#333; font-size:16px; text-align:left;">✅ 辨識結果</h3>
+        <h3 style="margin:0 0 10px 0; color:#333; font-size:16px;">✅ 辨識結果</h3>
         <table id="resultTable">
             <thead>
                 <tr><th width="35%">病歷號</th><th width="50%">姓名</th><th width="15%"></th></tr>
@@ -88,147 +79,129 @@
             <tbody id="tableBody"></tbody>
         </table>
         <div style="display:flex; gap:10px; margin-top:15px;">
-            <button onclick="copyResult()" style="flex:1; padding:12px; background:#1a73e8; color:white; border:none; border-radius:8px; font-weight:bold;">📋 複製結果</button>
-            <button onclick="location.reload()" style="flex:1; padding:12px; background:#f1f3f4; color:#333; border:none; border-radius:8px; font-weight:bold;">🔄 清除重來</button>
+            <button onclick="copyResult()" style="flex:1; padding:12px; background:#1a73e8; color:white; border:none; border-radius:8px; font-weight:bold;">📋 複製</button>
+            <button onclick="location.reload()" style="flex:1; padding:12px; background:#6c757d; color:white; border:none; border-radius:8px; font-weight:bold;">🔄 重來</button>
         </div>
     </div>
 </div>
 
 <script>
-    let worker = null;
-    let isWorkerReady = false;
+    async function processImage(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
 
-    async function startOCR(type) {
-        // 1. 如果引擎還沒準備好，先初始化
-        if (!isWorkerReady) {
-            await initWorker();
-            if (!isWorkerReady) return; // 如果初始化失敗則停止
-        }
-
-        // 2. 觸發對應的 input
-        if (type === 'camera') {
-            document.getElementById('cameraInput').click();
-        } else {
-            document.getElementById('galleryInput').click();
-        }
-    }
-
-    async function initWorker() {
-        const status = document.getElementById('statusBox');
-        const pWrapper = document.getElementById('pWrapper');
-        const pFill = document.getElementById('pFill');
-        const pText = document.getElementById('pText');
+        // UI 鎖定
         const btns = document.querySelectorAll('.btn-action');
-
-        // 鎖定按鈕
-        btns.forEach(b => { b.classList.add('btn-disabled'); b.disabled = true; });
-        pWrapper.style.display = 'block';
+        btns.forEach(b => b.classList.add('btn-disabled'));
+        document.getElementById('resultArea').style.display = 'none';
+        document.getElementById('pBar').style.display = 'block';
         
         try {
-            status.innerHTML = "🚀 正在下載輕量版核心 (3MB)...";
-            pFill.style.width = '10%';
-
-            // 🌟 關鍵修改：強制使用 fast (輕量) 語言包路徑
-            worker = await Tesseract.createWorker({
-                langPath: 'https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0_fast', 
-                logger: m => {
-                    if (m.status.includes('loading')) {
-                        // 模擬進度
-                        if(m.progress < 1) pFill.style.width = (m.progress * 50) + '%';
-                        pText.innerText = "正在下載 AI 模型 (請保持網路暢通)...";
-                    } else if (m.status.includes('initializing')) {
-                        pFill.style.width = '70%';
-                        pText.innerText = "正在啟動引擎...";
-                    }
-                }
-            });
-
-            pText.innerText = "載入繁體中文...";
-            await worker.loadLanguage('chi_tra');
-            await worker.initialize('chi_tra');
+            updateLog("正在處理圖片 (黑白化)...");
             
-            // 設定參數 (只抓數字和繁體中文，過濾雜訊)
-            await worker.setParameters({
-                tessedit_char_whitelist: '0123456789林陳李黃張王吳劉蔡楊許鄭謝郭洪曾邱廖賴周徐蘇葉莊呂江何蕭羅高潘簡朱鍾彭游詹胡施沈余盧梁趙顏柯孫魏翁戴范宋鄧杜侯曹薛傅丁温紀蔣歐藍連馬董古湯閻簡不知山水木土金火日月' 
-                // 上面是常用姓氏白名單，加上數字，幫助濾除亂碼
-            });
-
-            isWorkerReady = true;
-            status.innerHTML = "✅ 系統就緒";
-            status.style.background = "#d1e7dd";
-            status.style.color = "#0f5132";
+            // 1. 使用 Canvas 進行圖片前處理 (壓縮 + 二值化)
+            const canvas = document.getElementById('processCanvas');
+            await imageToBlackAndWhite(file, canvas);
             
-            pWrapper.style.display = 'none';
+            document.getElementById('previewArea').style.display = 'block';
+            updateLog("初始化核心 (這步最久，請稍候)...");
+
+            // 2. 執行 Tesseract
+            await runTesseract(canvas);
 
         } catch (err) {
             console.error(err);
-            document.getElementById('errorBox').style.display = 'block';
-            document.getElementById('errorBox').innerHTML = `<strong>啟動失敗</strong><br>${err.message}<br><br>請確認手機網路是否正常。`;
-            status.innerHTML = "❌ 發生錯誤";
+            alert("❌ 發生錯誤: " + err.message + "\n建議關閉其他 APP 釋放記憶體。");
+            updateLog("發生錯誤");
         } finally {
-            // 解鎖按鈕
-            btns.forEach(b => { b.classList.remove('btn-disabled'); b.disabled = false; });
+            btns.forEach(b => b.classList.remove('btn-disabled'));
         }
+        input.value = '';
     }
 
-    async function processFile(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        const status = document.getElementById('statusBox');
-        const img = document.getElementById('preview-img');
-        const pWrapper = document.getElementById('pWrapper');
+    // 將圖片轉為「高對比黑白」的小尺寸圖片
+    function imageToBlackAndWhite(file, canvas) {
+        return new Promise((resolve) => {
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+                // 強制縮小到 600px 寬，這是手機跑得動的關鍵
+                const maxWidth = 600;
+                const scale = maxWidth / img.width;
+                canvas.width = maxWidth;
+                canvas.height = img.height * scale;
+
+                // 繪製縮小圖
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                // 取得像素資料進行二值化 (Thresholding)
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                // 簡單的二值化演算法
+                for (let i = 0; i < data.length; i += 4) {
+                    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                    const color = avg > 120 ? 255 : 0; // 門檻值 120
+                    data[i] = color;     // R
+                    data[i + 1] = color; // G
+                    data[i + 2] = color; // B
+                }
+                ctx.putImageData(imageData, 0, 0);
+                resolve();
+            };
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    async function runTesseract(canvasElement) {
         const pFill = document.getElementById('pFill');
-        const pText = document.getElementById('pText');
-
-        // 顯示圖片
-        img.src = URL.createObjectURL(file);
-        img.style.display = 'block';
-        document.getElementById('resultArea').style.display = 'none';
-        pWrapper.style.display = 'block';
         
-        try {
-            status.innerHTML = "⚡ 正在壓縮圖片...";
-            pFill.style.width = '10%';
-            
-            // 極限壓縮：寬度限制 800px，品質 0.6
-            const compressedFile = await imageCompression(file, { 
-                maxSizeMB: 0.5, 
-                maxWidthOrHeight: 800,
-                useWebWorker: true 
-            });
-            
-            status.innerHTML = "🔍 正在辨識文字...";
-            pFill.style.width = '40%';
-            pText.innerText = "AI 正在閱讀您的照片...";
+        const worker = Tesseract.createWorker({
+            logger: m => {
+                if(m.status === 'recognizing text') {
+                    pFill.style.width = (m.progress * 100) + '%';
+                    updateLog(`正在讀取文字... ${Math.floor(m.progress * 100)}%`);
+                } else if (m.status.includes('loading')) {
+                    updateLog("下載字典檔 (約15MB)...");
+                }
+            }
+        });
 
-            const { data: { text } } = await worker.recognize(compressedFile);
-            
-            pFill.style.width = '100%';
-            status.innerHTML = "✅ 辨識完成";
-            
-            const results = parseData(text);
-            renderTable(results);
-            document.getElementById('resultArea').style.display = 'block';
-            pWrapper.style.display = 'none';
+        await worker.load();
+        await worker.loadLanguage('chi_tra');
+        await worker.initialize('chi_tra');
+        
+        // 設定只辨識特定字元 (白名單)，大幅減少記憶體使用
+        await worker.setParameters({
+            tessedit_char_whitelist: '0123456789林陳李黃張王吳劉蔡楊許鄭謝郭洪曾邱廖賴周徐蘇葉莊呂江何蕭羅高潘簡朱鍾彭游詹胡施沈余盧梁趙顏柯孫魏翁戴范宋鄧杜侯曹薛傅丁温紀蔣歐藍連馬董古湯閻簡不知山水木土金火日月'
+        });
 
-        } catch (err) {
-            alert("辨識過程出錯：" + err.message);
-        }
-        input.value = ''; // 重置
+        const { data: { text } } = await worker.recognize(canvasElement);
+        await worker.terminate();
+
+        updateLog("✅ 完成！");
+        const data = parseData(text);
+        renderTable(data);
+        document.getElementById('resultArea').style.display = 'block';
+    }
+
+    function updateLog(msg) {
+        document.getElementById('logText').innerText = msg;
     }
 
     function parseData(text) {
-        const lines = text.split('\n');
+        const lines = text.split(/\r?\n/);
         const data = [];
-        // 常見姓名排除詞
+        // 排除雜訊
         const noise = ['病歷', '姓名', '複診', '資料', '收案', '醫師', '確認', '日期', '上午', '下午', '單內', '合併', '註記'];
 
         lines.forEach(line => {
             const clean = line.replace(/\s+/g, '').trim(); 
             if (clean.length < 5) return;
 
-            const mrnMatch = clean.match(/(\d{5,8})/); // 抓病歷號
-            // 抓 2-4 個中文字
+            // 抓取 5-8 位數字
+            const mrnMatch = clean.match(/(\d{5,8})/);
+            // 抓取中文
             const nameMatch = clean.match(/[\u4e00-\u9fa5]{2,4}/);
 
             if (mrnMatch) {
@@ -249,7 +222,7 @@
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" style="color:red;text-align:center;">⚠️ 沒抓到資料，請盡量拍正一點</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="color:red;text-align:center;">⚠️ 沒抓到資料，請調整角度重拍</td></tr>';
             return;
         }
         data.forEach(r => {
@@ -269,7 +242,7 @@
             if(i.length) txt += `${i[0].value}\t${i[1].value}\n`;
         });
         if(txt) navigator.clipboard.writeText(txt).then(()=>alert("✅ 已複製")).catch(()=>alert("❌ 複製失敗"));
-        else alert("沒有內容可複製");
+        else alert("無資料");
     }
 </script>
 
