@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>病歷辨識 (電腦穩定版)</title>
+    <title>病歷辨識 (電腦高畫質版)</title>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
     
     <style>
-        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; padding: 20px; max-width: 900px; margin: 0 auto; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f4f6f8; padding: 20px; max-width: 900px; margin: 0 auto; }
         .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h2 { margin: 0 0 20px 0; color: #1a73e8; text-align: center; }
+        h2 { margin: 0 0 20px 0; color: #1a73e8; text-align: center; font-weight: bold; }
         
-        .status-box { background: #e8f0fe; color: #1557b0; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; border: 1px solid #d2e3fc; font-weight: bold; font-size: 16px;}
-        .error-box { background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; text-align: left; font-size: 14px; border: 1px solid #fecaca; word-break: break-all;}
+        .status-box { background: #e8f0fe; color: #1557b0; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; border: 1px solid #d2e3fc; font-weight: bold; font-size: 16px; }
+        .error-box { background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; text-align: left; font-size: 14px; border: 1px solid #fecaca; }
 
         .progress-wrapper { margin: 20px 0; display: none; }
         .progress-bar { width: 100%; height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden; }
@@ -20,7 +20,7 @@
         .progress-text { font-size: 14px; color: #666; margin-top: 8px; text-align: center; }
 
         .btn-group { display: flex; gap: 20px; margin-top: 20px; }
-        .btn-action { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; color: white; cursor: pointer; transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 10px;}
+        .btn-action { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; color: white; cursor: pointer; transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .btn-action:active { transform: scale(0.98); }
         .btn-camera { background: linear-gradient(135deg, #28a745, #218838); }
         .btn-gallery { background: linear-gradient(135deg, #0d6efd, #0b5ed7); }
@@ -28,7 +28,8 @@
 
         .btn-back { display:inline-block; margin-bottom:20px; text-decoration:none; color:#666; font-size:16px; padding: 8px 16px; border: 1px solid #ddd; border-radius: 20px; background: white;}
 
-        #preview-img { max-width: 100%; border-radius: 8px; margin-top: 20px; display: none; border: 1px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        /* 預覽圖保持原色，不縮小 */
+        #preview-img { width: 100%; border-radius: 8px; margin-top: 20px; display: none; border: 1px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; border: 1px solid #eee; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 16px; }
@@ -88,14 +89,14 @@
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
 
-        // 介面重置
+        // 鎖定介面
         const btns = document.querySelectorAll('.btn-action');
         btns.forEach(b => b.classList.add('btn-disabled'));
         document.getElementById('resultArea').style.display = 'none';
         document.getElementById('errorBox').style.display = 'none';
         document.getElementById('pWrapper').style.display = 'block';
         
-        // 顯示預覽圖 (彩色原圖)
+        // 顯示原圖
         const img = document.getElementById('preview-img');
         img.src = URL.createObjectURL(file);
         img.style.display = 'block';
@@ -105,8 +106,8 @@
         } catch (err) {
             console.error(err);
             document.getElementById('errorBox').style.display = 'block';
-            document.getElementById('errorBox').innerHTML = `<strong>發生錯誤：</strong><br>${err.message}<br><br>請確認：<br>1. chi_tra.traineddata 已上傳到 GitHub。<br>2. 檔案名稱正確 (沒有 .gz 副檔名)。`;
-            updateStatus("❌ 執行失敗");
+            document.getElementById('errorBox').innerText = `錯誤：${err.message}`;
+            updateStatus("❌ 發生錯誤");
         } finally {
             btns.forEach(b => b.classList.remove('btn-disabled'));
         }
@@ -117,27 +118,26 @@
         const pFill = document.getElementById('pFill');
         const pText = document.getElementById('pText');
 
-        updateStatus("🚀 正在啟動引擎 (Tesseract v4)...");
+        updateStatus("🚀 正在啟動引擎...");
 
-        // 🔥 這裡使用 v4 的標準寫法，絕對不會報錯
-        const worker = Tesseract.createWorker({
-            langPath: './',   // 讀取當前目錄
-            gzip: false,      // 不使用 gzip (因為您上傳的是 .traineddata)
+        // 🔥 修正：使用 v4 寫法，移除錯誤的 worker.load()
+        const worker = await Tesseract.createWorker({
+            langPath: './',    // 在當前目錄找字庫
+            gzip: false,       // 您的檔案沒有 .gz，所以設為 false
             logger: m => {
                 if (m.status === 'recognizing text') {
                     pFill.style.width = (m.progress * 100) + '%';
                     pText.innerText = `🔍 正在辨識文字... ${Math.floor(m.progress * 100)}%`;
                 } else if (m.status.includes('loading')) {
-                    // 顯示詳細下載狀態
-                    pText.innerText = `📥 正在讀取字庫檔案... (${m.status})`;
+                    pText.innerText = `📥 正在讀取字庫檔案...`;
                 } else {
                     pText.innerText = `⚙️ ${m.status}...`;
                 }
             }
         });
 
-        // 依序執行，確保每一步都成功
-        await worker.load();
+        // 依序執行初始化
+        // 註：這裡絕對不能再加 await worker.load()
         
         updateStatus("📚 正在載入繁體中文 (chi_tra)...");
         await worker.loadLanguage('chi_tra');
@@ -170,12 +170,13 @@
     function parseData(text) {
         const lines = text.split(/\r?\n/);
         const data = [];
+        // 雜訊詞
         const noise = ['病歷', '姓名', '複診', '收案', '醫師', '確認', '日期', '上午', '下午', '單內', '合併', '註記', '資料', '齊全', '號', '診'];
 
         lines.forEach(line => {
             // 移除空白
             let clean = line.replace(/\s+/g, '');
-            // 移除可能誤判的直線
+            // 移除干擾的表格線
             clean = clean.replace(/\|/g, '');
 
             if (clean.length < 4) return;
@@ -196,7 +197,7 @@
                     }
                 }
                 
-                // 只要有病歷號就列出來，即便名字沒抓到
+                // 只要有病歷號就列出來
                 if (mrnMatch[0]) {
                     data.push({ mrn: mrnMatch[0], name: validName || '' });
                 }
