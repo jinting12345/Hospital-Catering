@@ -222,7 +222,9 @@
             const isWeekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
             
             const weekStr = weekDays[dateObj.getDay()]; 
-            const displayDate = `${month}/${day} <span style="font-size:0.9em; color:#666;">${weekStr}</span>`;
+            
+            // 🔥 修改這裡：移除了 color:#666，讓它自動繼承 date-cell 的藍色
+            const displayDate = `${month}/${day} <span style="font-size:0.9em;">${weekStr}</span>`;
 
             // 處理班表人員
             const daySchedules = schedules.filter(s => s.date === dateStr);
