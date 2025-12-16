@@ -121,13 +121,12 @@
     
     <div class="info-card">
         <div class="info-item">
-            <h3>雲端空間使用量 (1000MB)</h3>
+            <h3>雲端空間使用量 (500MB)</h3>
             <span id="storage-usage" class="info-number">計算中...</span>
             <span id="storage-days" class="info-sub"></span>
         </div>
         <div class="info-item" style="text-align: right;">
-            <h3>本月總照片數</h3>
-            <span id="total-photos" class="info-number">0 張</span>
+            <h3>累積總照片數</h3> <span id="total-photos" class="info-number">0 張</span>
         </div>
     </div>
 
@@ -180,7 +179,10 @@
     async function checkSession() {
         const { data } = await supabase.auth.getSession();
         if(!data.session) { alert("請先登入"); window.location.href = 'index.html'; } 
-        else { fetchData(); }
+        else { 
+            fetchData(); 
+            updateGlobalStats(); // 🔥 登入後先抓一次全域統計
+        }
     }
 
     async function fetchData() {
@@ -200,7 +202,7 @@
 
         currentRecords = recordData; 
         renderTable(year, month, scheduleData, recordData);
-        updateStats(recordData);
+        // 注意：這裡不再呼叫 updateStats，改用 updateGlobalStats 獨立運作
         showLoading(false);
     }
 
@@ -244,6 +246,46 @@
         }
     }
 
+    // ==========================================
+    // 🔥 全新功能：計算全域統計 (不受月份切換影響)
+    // ==========================================
+    async function updateGlobalStats() {
+        // 使用 Supabase 的 count 功能，只算數量不抓資料，速度快
+        const { count, error } = await supabase
+            .from('meal_records')
+            .select('*', { count: 'exact', head: true });
+
+        if (error) {
+            console.error("統計讀取失敗:", error);
+            document.getElementById('total-photos').innerText = "讀取失敗";
+            return;
+        }
+
+        const totalCount = count || 0;
+        const usedSpace = (totalCount * 0.5); // 假設每張 0.5 MB
+        const totalSpace = 500; // 🔥 修改：設定上限為 500 MB
+        
+        document.getElementById('total-photos').innerText = totalCount + " 張"; 
+        document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
+        
+        // 計算剩餘天數 (預估每日 3MB)
+        const dailyUsage = 3; 
+        const remainingSpace = totalSpace - usedSpace;
+        const daysLeft = Math.floor(remainingSpace / dailyUsage);
+
+        const daysLabel = document.getElementById('storage-days');
+        if (daysLeft > 100) {
+            daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
+            daysLabel.style.color = "#ffeb3b"; 
+        } else if (daysLeft > 30) {
+            daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
+            daysLabel.style.color = "#fff"; 
+        } else {
+            daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
+            daysLabel.style.color = "#ff8a80"; 
+        }
+    }
+
     async function updateStaff(date, newName) {
         newName = newName.trim();
         try {
@@ -282,9 +324,6 @@
     }
     function closeImageModal() { document.getElementById('imageModal').style.display = "none"; }
 
-    // ==========================================
-    // 🔥 功能 1: 單純下載照片 (不刪除)
-    // ==========================================
     async function handleDownloadOnly() {
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
         if (checkboxes.length === 0) { alert("請先勾選要下載的日期"); return; }
@@ -313,9 +352,6 @@
         finally { showLoading(false); }
     }
 
-    // ==========================================
-    // 🔥 功能 2: 單純刪除資料 (需管理員權限 + 二次確認)
-    // ==========================================
     async function handleDeleteOnly() {
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
         if (checkboxes.length === 0) { alert("請先勾選要刪除的日期"); return; }
@@ -323,7 +359,6 @@
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { alert("請先登入"); return; }
 
-        // 多重警告
         if(!confirm(`⚠️ 危險操作警告 ⚠️\n\n您即將「永久刪除」選取日期的所有照片與紀錄。\n刪除後無法復原！\n\n您確定要繼續嗎？`)) return;
         if(!confirm(`再次確認：\n\n如果您還沒備份，請按「取消」先去下載。\n\n真的要刪除嗎？`)) return;
 
@@ -338,20 +373,19 @@
         }
 
         try {
-            // 1. 刪除 Storage 中的實體檔案
             const pathsToRemove = targetRecords.map(r => r.photo_path);
             if (pathsToRemove.length > 0) {
                 const { error: storageError } = await supabase.storage.from('private_photos').remove(pathsToRemove);
                 if (storageError) throw storageError;
             }
 
-            // 2. 刪除 Database 中的紀錄
             const idsToRemove = targetRecords.map(r => r.id);
             const { error: dbError } = await supabase.from('meal_records').delete().in('id', idsToRemove);
             if (dbError) throw dbError;
 
             alert("✅ 刪除成功！選取的紀錄已移除。");
-            fetchData(); // 重新整理表格
+            fetchData(); 
+            updateGlobalStats(); // 🔥 刪除後更新全域統計
         } catch (err) { 
             console.error(err); 
             alert("刪除發生錯誤：" + err.message); 
@@ -361,29 +395,6 @@
 
     function toggleAll(source) { document.querySelectorAll('.date-checkbox').forEach(cb => cb.checked = source.checked); }
     function showLoading(show, text) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; if(text) document.getElementById('loading-text').innerText = text; }
-    
-    function updateStats(data) { 
-        const usedSpace = (data.length * 0.5); 
-        const totalSpace = 1000; 
-        document.getElementById('total-photos').innerText = data.length + " 張"; 
-        document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
-        
-        const dailyUsage = 3; 
-        const remainingSpace = totalSpace - usedSpace;
-        const daysLeft = Math.floor(remainingSpace / dailyUsage);
-
-        const daysLabel = document.getElementById('storage-days');
-        if (daysLeft > 100) {
-            daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#ffeb3b"; 
-        } else if (daysLeft > 30) {
-            daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#fff"; 
-        } else {
-            daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#ff8a80"; 
-        }
-    }
     
     function translate(eng) { 
         const map = { 'breakfast': '早餐', 'lunch': '午餐', 'dinner': '晚餐', 'patient': '病患', 'nursing': '護家', 'care': '護家' }; 
