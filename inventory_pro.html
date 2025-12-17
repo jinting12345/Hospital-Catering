@@ -20,27 +20,37 @@
         .back-btn { text-decoration: none; color: #666; font-weight: bold; font-size: 0.9em; display: flex; align-items: center; gap: 5px; }
         h2 { margin: 0; color: #2c3e50; font-size: 1.2em; }
         
-        /* Tabs */
+        /* 分頁標籤 Tabs */
         .tabs { display: flex; gap: 5px; margin-bottom: 10px; background: #e4e6eb; padding: 3px; border-radius: 8px; }
         .tab-btn { flex: 1; padding: 8px; border: none; background: transparent; cursor: pointer; border-radius: 6px; font-weight: bold; color: #65676b; transition: 0.2s; font-size: 0.95em; }
         .tab-btn.active { background: white; color: #1a73e8; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        /* Controls */
+        /* 控制列 Controls */
         .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .search-input { flex: 2; min-width: 120px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
         .category-select { flex: 1; min-width: 90px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
 
-        /* Buttons */
+        /* 按鈕群組 */
         .btn-group { display: flex; gap: 5px; flex-wrap: wrap; width: 100%; margin-top: 5px; }
-        .action-btn { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.85em; }
+        .action-btn { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.85em; transition: 0.2s; }
+        
         .btn-in { background: #34c759; } 
         .btn-out { background: #ff3b30; } 
         .btn-import { background: #007aff; } 
         .btn-export { background: #5856d6; } 
         .btn-stocktake { background: #ff9500; } 
         .btn-detail { background: #4cd964; color: white; } 
+        
+        /* 🔥 即期品按鈕樣式 */
+        .btn-warning { background: #ffcc00; color: #333; }
+        .btn-warning.active { background: #ff9500; color: white; box-shadow: inset 0 2px 5px rgba(0,0,0,0.2); }
+
+        /* 🔥 刪除按鈕樣式 (僅在編輯模式出現) */
+        .btn-delete-item { background: #ff3b30; color: white; padding: 6px 10px; margin-left: 5px; border-radius: 6px; font-size: 12px; cursor: pointer; display: none; }
+        .is-editing .btn-delete-item { display: inline-block; }
+
         .btn-lock { background: #6c757d; color: white; }
         .btn-lock.editing { background: #dc3545; }
         .admin-only { display: none; }
@@ -61,14 +71,9 @@
         .bg-red { background: #dc3545; }
         .bg-cat { background: #8e8e93; color: white; margin-right: 4px; }
 
-        /* 🔥 品名編輯樣式 🔥 */
-        .name-input { 
-            border: none; background: transparent; font-weight: bold; font-size: 1em; color: #333; width: 100%; 
-            padding: 0; margin: 0; box-sizing: border-box;
-        }
-        .is-editing .name-input { 
-            border: 1px solid #007aff; background: #fff; padding: 5px; border-radius: 4px; 
-        }
+        /* 品名編輯樣式 */
+        .name-input { border: none; background: transparent; font-weight: bold; font-size: 1em; color: #333; width: 100%; padding: 0; margin: 0; box-sizing: border-box; }
+        .is-editing .name-input { border: 1px solid #007aff; background: #fff; padding: 5px; border-radius: 4px; }
         .name-input:disabled { opacity: 1; color: #333; -webkit-text-fill-color: #333; }
 
         /* Mobile Layout */
@@ -81,7 +86,7 @@
             .main-content-cell { flex: 1; padding-left: 5px; padding-right: 5px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
             .row-top { display: flex; align-items: center; margin-bottom: 2px; gap: 5px; }
             .row-bottom { display: flex; align-items: center; font-size: 0.85em; color: #666; gap: 8px; }
-            .action-cell { width: auto; text-align: right; }
+            .action-cell { width: auto; text-align: right; display: flex; align-items: center; justify-content: flex-end; }
             .btn-detail { padding: 6px 10px; font-size: 13px; }
             .desktop-only-cell { display: none !important; }
         }
@@ -137,6 +142,8 @@
             </select>
             <input type="text" id="searchInput" class="search-input" placeholder="搜尋品名..." onkeyup="renderTable()">
             
+            <button id="btnExpiring" class="action-btn btn-warning" onclick="toggleExpiringFilter()">⚠️ 即期品</button>
+
             <div class="btn-group">
                 <button id="editToggleBtn" class="action-btn btn-lock admin-only" onclick="toggleEditMode()">🔒 編輯</button>
                 <input type="file" id="excel_input" accept=".xlsx, .xls" style="display: none;" onchange="handleExcelImport(this)">
@@ -156,7 +163,7 @@
                     <th width="">品名</th>
                     <th width="60">庫存</th>
                     <th width="90">效期</th>
-                    <th width="60">操作</th>
+                    <th width="80">操作</th>
                 </tr>
             </thead>
             <tbody id="stockBody"></tbody>
@@ -234,13 +241,11 @@
 </div>
 
 <script>
-    // 字串清理與 Supabase 初始化
     function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
     const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
     const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
-    // 全域變數
     let rawInventory = [];
     let groupedInventory = [];
     let currentUser = '';
@@ -249,8 +254,8 @@
     let selectedItems = new Set();
     let isEditMode = false;
     let sortableInstance = null;
+    let showExpiringOnly = false; // 🔥 即期品過濾狀態
 
-    // 初始化
     (async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if(!session) window.location.href = 'index.html';
@@ -264,7 +269,6 @@
         document.getElementById('newItemDate').value = today;
     })();
 
-    // 檢查權限
     async function checkUserRole() {
         const { data } = await supabase.from('user_roles').select('role').eq('email', currentUser).single();
         isAdmin = (data && data.role === 'admin');
@@ -276,7 +280,6 @@
         }
     }
 
-    // 切換分頁
     function switchTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -284,7 +287,6 @@
         event.target.classList.add('active');
     }
 
-    // 🔥 編輯模式：解鎖輸入框 & 啟用拖曳
     function toggleEditMode() {
         isEditMode = !isEditMode;
         const btn = document.getElementById('editToggleBtn');
@@ -295,10 +297,8 @@
             btn.innerHTML = '🔓 完成';
             btn.classList.add('editing');
             tbody.classList.add('is-editing');
-            // 啟用輸入框
             inputs.forEach(input => input.disabled = false);
             
-            // 啟用拖曳
             sortableInstance = Sortable.create(tbody, {
                 handle: '.drag-handle',
                 animation: 150,
@@ -308,19 +308,23 @@
             btn.innerHTML = '🔒 編輯';
             btn.classList.remove('editing');
             tbody.classList.remove('is-editing');
-            // 禁用輸入框
             inputs.forEach(input => input.disabled = true);
-            
             if (sortableInstance) sortableInstance.destroy();
         }
     }
 
-    // 🔥 排序更新邏輯
+    // 🔥 即期品開關邏輯
+    function toggleExpiringFilter() {
+        showExpiringOnly = !showExpiringOnly;
+        const btn = document.getElementById('btnExpiring');
+        if (showExpiringOnly) btn.classList.add('active');
+        else btn.classList.remove('active');
+        renderTable();
+    }
+
     async function updateOrderAfterDrag() {
         const rows = document.querySelectorAll('#stockBody tr');
         let updates = [];
-        
-        // 更新 UI 上的數字
         rows.forEach((row, index) => {
             const name = row.dataset.name;
             const newOrder = index + 1;
@@ -333,37 +337,35 @@
                 updates.push(name);
             }
         });
-
-        // 寫入資料庫
         for (let i = 0; i < updates.length; i++) {
             const group = groupedInventory.find(g => g.name === updates[i]);
             await supabase.from('inventory').update({ sort_order: group.sortOrder }).eq('name', updates[i]);
         }
     }
 
-    // 🔥 改名邏輯
     async function renameItem(oldName, newName) {
         if(!newName || newName === oldName) return;
-        
-        if(!confirm(`確定要將 "${oldName}" 改名為 "${newName}" 嗎？\n(這會同時更新該品項的所有庫存紀錄)`)) {
-            loadInventory(); // 還原
-            return;
-        }
-
+        if(!confirm(`確定要將 "${oldName}" 改名為 "${newName}" 嗎？`)) { loadInventory(); return; }
         try {
             const { error } = await supabase.from('inventory').update({ name: newName }).eq('name', oldName);
             if(error) throw error;
-            // 紀錄改名操作
             await logAction('更名', `${oldName}->${newName}`, 0, 0, '-', '品名修改', '管理員');
-            alert("✅ 改名成功");
-            loadInventory();
-        } catch(e) {
-            alert("改名失敗: " + e.message);
-            loadInventory();
-        }
+            alert("✅ 改名成功"); loadInventory();
+        } catch(e) { alert("改名失敗: " + e.message); loadInventory(); }
     }
 
-    // 讀取庫存資料
+    // 🔥 刪除品項功能
+    async function deleteItem(name) {
+        if(!confirm(`❌ 警告：確定要刪除 "${name}" 嗎？\n此動作將刪除該品項的所有庫存資料，無法復原！`)) return;
+        try {
+            const { error } = await supabase.from('inventory').delete().eq('name', name);
+            if(error) throw error;
+            await logAction('刪除', name, 0, 0, '-', '手動刪除', '管理員');
+            alert("已刪除");
+            loadInventory();
+        } catch(e) { alert("刪除失敗: " + e.message); }
+    }
+
     async function loadInventory() {
         const tbody = document.getElementById('stockBody');
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">載入中...</td></tr>';
@@ -380,10 +382,7 @@
         data.forEach(item => {
             const name = item.name;
             if (!groups[name]) {
-                groups[name] = { 
-                    name: name, category: item.category, unit: item.unit, 
-                    totalQty: 0, batches: [], sortOrder: item.sort_order || 999 
-                };
+                groups[name] = { name: name, category: item.category, unit: item.unit, totalQty: 0, batches: [], sortOrder: item.sort_order || 999 };
             }
             groups[name].totalQty += item.quantity;
             groups[name].batches.push(item);
@@ -407,10 +406,25 @@
         const today = new Date();
 
         tbody.innerHTML = '';
+        
         const filtered = groupedInventory.filter(group => {
             const matchText = group.name.toLowerCase().includes(searchText);
             const matchCat = filterCat === 'ALL' || group.category === filterCat;
-            return matchText && matchCat;
+            
+            // 🔥 即期品過濾邏輯
+            let isExpiring = false;
+            if (showExpiringOnly) {
+                // 檢查該品項是否有任何一批貨剩餘效期 <= 30 天
+                isExpiring = group.batches.some(b => {
+                    if (!b.expiry_date) return false;
+                    const days = (new Date(b.expiry_date) - today) / (1000 * 60 * 60 * 24);
+                    return days <= 30;
+                });
+            } else {
+                isExpiring = true; // 不過濾時全都顯示
+            }
+
+            return matchText && matchCat && isExpiring;
         });
 
         if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">查無資料</td></tr>'; return; }
@@ -435,7 +449,9 @@
             const isChecked = selectedItems.has(group.name) ? 'checked' : '';
             const isDisabled = isEditMode ? '' : 'disabled';
             
-            // 🔥 新增：品名改為 Input
+            // 🔥 新增：刪除按鈕 (僅在編輯模式顯示)
+            const deleteBtn = `<button class="btn-delete-item admin-only" onclick="deleteItem('${group.name}')"><i class="fas fa-trash"></i></button>`;
+
             tr.innerHTML = `
                 <td class="checkbox-cell"><input type="checkbox" class="item-check" value="${group.name}" ${isChecked} onchange="toggleSelection('${group.name}', this)"></td>
                 
@@ -464,11 +480,15 @@
                 
                 <td class="action-cell">
                     <button class="action-btn btn-detail" onclick="openDetailModal('${group.name}')">詳情</button>
+                    ${deleteBtn}
                 </td>
             `;
             tbody.appendChild(tr);
         });
         updateFab();
+        
+        // 重新檢查 Admin 權限以顯示刪除按鈕
+        if(isAdmin) document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-flex');
     }
 
     function toggleSelection(name, checkbox) {
@@ -619,10 +639,7 @@
 
     async function logAction(action, name, change, final, expiry, note, operatorName) {
         const op = operatorName || '管理員';
-        await supabase.from('inventory_logs').insert([{ 
-            product_name: name, action_type: action, change_qty: change, 
-            final_qty: final, operator: op, note: `${expiry} ${note}` 
-        }]);
+        await supabase.from('inventory_logs').insert([{ product_name: name, action_type: action, change_qty: change, final_qty: final, operator: op, note: `${expiry} ${note}` }]);
     }
 
     async function loadLogs() {
@@ -638,7 +655,6 @@
         }
     }
 
-    // 盤點覆蓋匯入
     function handleExcelImport(input) {
         const file = input.files[0];
         if(!file) return;
@@ -671,15 +687,11 @@
 
                     if (!row['排序']) {
                         const { data: oldData } = await supabase.from('inventory').select('sort_order').eq('name', name).limit(1);
-                        if (oldData && oldData.length > 0) {
-                            sortOrder = oldData[0].sort_order;
-                        }
+                        if (oldData && oldData.length > 0) sortOrder = oldData[0].sort_order;
                     }
 
-                    // 1. 刪除舊帳
                     await supabase.from('inventory').delete().eq('name', name);
 
-                    // 2. 準備新帳
                     let itemsToInsert = [];
                     if (row['數量'] != null || row['庫存'] != null) {
                         itemsToInsert.push({ qty: row['數量'] || row['庫存'], date: row['有效日期'] });
@@ -692,7 +704,6 @@
                         }
                     }
 
-                    // 3. 寫入新帳
                     let totalNewQty = 0;
                     for (let item of itemsToInsert) {
                         let finalDate = null;
