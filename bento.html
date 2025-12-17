@@ -177,9 +177,9 @@
             });
         }
 
-        // 🔥 修改：接收 inputElement 參數，因為現在有兩個來源
+        // 圖片處理邏輯
         async function processImage(inputElement) {
-            const file = inputElement.files[0]; // 直接從觸發事件的 input 取得檔案
+            const file = inputElement.files[0]; 
             if(!file) return;
             document.getElementById('status').innerText = '處理中 (壓縮+壓字)...';
             
@@ -201,7 +201,6 @@
                 document.getElementById('submitBtn').style.display = 'block';
                 document.getElementById('status').innerText = '';
                 
-                // 重置 input 以便下次能選同一張圖（如果需要）
                 inputElement.value = ''; 
 
             } catch(e) { 
@@ -210,18 +209,67 @@
             }
         }
 
+        // 🔥 重點修改：上傳與覆蓋邏輯
         async function uploadData() {
             if(!processedFile) return;
             const btn = document.getElementById('submitBtn');
             const date = document.getElementById('dateInput').value;
             
+            // 顯示用名稱
+            const tName = curTarget === 'nursing' ? '護家餐' : '病患餐';
+            const mName = curMeal === 'breakfast' ? '早餐' : curMeal === 'lunch' ? '午餐' : '晚餐';
+
             btn.disabled = true; 
-            btn.innerText = '上傳中...';
-            document.getElementById('status').innerText = '⏳ 正在上傳至雲端...';
+            btn.innerText = '檢查中...';
+            document.getElementById('status').innerText = '🔍 正在檢查重複資料...';
 
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) throw new Error("無法取得使用者資訊");
+
+                // 1. 檢查是否已存在該時段資料
+                const { data: existingRecord, error: checkError } = await supabase
+                    .from('meal_records')
+                    .select('id, photo_path')
+                    .eq('record_date', date)
+                    .eq('target_type', curTarget)
+                    .eq('meal_type', curMeal)
+                    .maybeSingle();
+
+                if (checkError) throw new Error('檢查重複失敗: ' + checkError.message);
+
+                // 2. 如果存在，跳出警告並要求輸入「覆蓋」
+                if (existingRecord) {
+                    const userInput = prompt(`⚠️ 警告：重複上傳！\n\n【${date} ${tName} ${mName}】已經有照片了。\n\n若確定要用這張新照片「覆蓋」舊的，請在下方輸入 "覆蓋" 二字：`);
+
+                    if (userInput !== "覆蓋") {
+                        // 取消或輸入錯誤
+                        btn.disabled = false;
+                        btn.innerText = '確認上傳';
+                        document.getElementById('status').innerText = '🚫 已取消上傳 (未覆蓋)';
+                        return; // 中斷流程
+                    }
+
+                    // 3. 確認覆蓋，開始刪除舊資料
+                    document.getElementById('status').innerText = '🗑️ 正在刪除舊資料...';
+
+                    // 刪除 Storage 舊檔
+                    if (existingRecord.photo_path) {
+                        await supabase.storage.from(BUCKET_NAME).remove([existingRecord.photo_path]);
+                    }
+
+                    // 刪除 DB 舊紀錄
+                    const { error: delErr } = await supabase
+                        .from('meal_records')
+                        .delete()
+                        .eq('id', existingRecord.id);
+                    
+                    if (delErr) throw new Error('舊資料刪除失敗: ' + delErr.message);
+                }
+
+                // 4. 開始上傳新資料
+                btn.innerText = '上傳中...';
+                document.getElementById('status').innerText = '⏳ 正在上傳新照片...';
 
                 const fileName = `${date}_${curTarget}_${curMeal}_${Date.now()}.jpg`;
                 
@@ -231,12 +279,12 @@
                 const userName = user.email ? user.email.split('@')[0] : 'Unknown';
 
                 const { error: dbErr } = await supabase.from('meal_records').insert([{
-                    user_id: user.id,          
-                    record_date: date,         
+                    user_id: user.id,           
+                    record_date: date,          
                     meal_type: curMeal,
                     target_type: curTarget,
-                    photo_path: fileName,      
-                    uploader_name: userName    
+                    photo_path: fileName,       
+                    uploader_name: userName     
                 }]);
                 
                 if(dbErr) throw new Error('資料庫寫入失敗: ' + dbErr.message);
