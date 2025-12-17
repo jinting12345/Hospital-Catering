@@ -42,9 +42,9 @@
         .btn-export { background: #5856d6; } 
         .btn-stocktake { background: #ff9500; } 
         .btn-detail { background: #4cd964; color: white; } 
+        
         .btn-warning { background: #ffcc00; color: #333; }
-        .btn-warning.active { background: #ff9500; color: white; box-shadow: inset 0 2px 5px rgba(0,0,0,0.2); }
-        .btn-delete { background: #ff3b30; color: white; display: none; } /* 預設隱藏 */
+        .btn-delete { background: #ff3b30; color: white; display: none; } 
 
         .btn-lock { background: #6c757d; color: white; }
         .btn-lock.editing { background: #dc3545; }
@@ -58,37 +58,20 @@
         .checkbox-cell { width: 30px; text-align: center; }
         .checkbox-cell input { width: 20px; height: 20px; }
 
-        /* Badge Status */
+        /* Badge */
         .badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; display: inline-block; text-align: center; }
         .bg-green { background: #28a745; }
         .bg-blue { background: #17a2b8; } 
         .bg-yellow { background: #ffc107; color: #333; }
         .bg-red { background: #dc3545; }
+        .bg-cat { background: #8e8e93; color: white; margin-right: 4px; }
 
-        /* 🔥 通用編輯輸入框樣式 (包含品名與分類) */
-        .edit-input {
-            border: none; background: transparent; width: 100%; box-sizing: border-box; padding: 4px;
-            transition: 0.2s; border-radius: 4px;
-        }
-        /* 編輯模式下變為白底藍框 */
-        .is-editing .edit-input {
-            border: 1px solid #007aff; background: #fff; color: #333;
-        }
+        /* 編輯框樣式 */
+        .edit-input { border: none; background: transparent; width: 100%; box-sizing: border-box; padding: 4px; transition: 0.2s; border-radius: 4px; font-weight: bold; color: #333; font-size: 1em; }
+        .is-editing .edit-input { border: 1px solid #007aff; background: #fff; color: #333; }
         .edit-input:disabled { opacity: 1; -webkit-text-fill-color: inherit; }
-
-        /* 品名樣式 */
-        .name-input { font-weight: bold; font-size: 1em; color: #333; }
-
-        /* 🔥 分類樣式 (平常像 Badge，編輯像 Input) */
-        .cat-input { 
-            font-size: 12px; text-align: center; font-weight: bold; 
-            color: #fff; background: #8e8e93; /* 鎖定時像灰色標籤 */
-            width: 80px; border-radius: 4px;
-        }
-        /* 編輯時把分類變回白底黑字方便打字 */
-        .is-editing .cat-input {
-            color: #333; background: #fff;
-        }
+        .cat-input { font-size: 12px; text-align: center; color: #fff; background: #8e8e93; width: 80px; border-radius: 4px; }
+        .is-editing .cat-input { color: #333; background: #fff; }
 
         /* Mobile Layout */
         @media (max-width: 768px) {
@@ -161,7 +144,7 @@
                 <button class="action-btn btn-stocktake" onclick="downloadBlankForm()">📄 盤點</button>
                 <button class="action-btn btn-export" onclick="exportStock()">📥 報表</button>
                 
-                <button id="btnExpiring" class="action-btn btn-warning" onclick="exportExpiringReport()">⚠️ 即期報表</button>
+                <button class="action-btn btn-warning" onclick="exportExpiringReport()">⚠️ 即期報表</button>
                 <button id="btnDelete" class="action-btn btn-delete" onclick="deleteSelectedItems()">🗑️ 刪除選取</button>
             </div>
         </div>
@@ -253,9 +236,15 @@
 </div>
 
 <script>
+    // 1. 初始化與安全檢查
     function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
     const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
+    
+    // 檢查 Supabase 是否載入
+    if (typeof window.supabase === 'undefined') {
+        alert("錯誤：無法載入 Supabase 函式庫，請檢查網路連線。");
+    }
     const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
     let rawInventory = [];
@@ -267,27 +256,48 @@
     let isEditMode = false;
     let sortableInstance = null;
 
+    // 2. 啟動程式 (加入 Try-Catch 防止卡死)
     (async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if(!session) window.location.href = 'index.html';
-        currentUser = session.user.email;
-        document.getElementById('userInfo').innerText = currentUser;
-        await checkUserRole();
-        loadInventory();
-        loadLogs();
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('newBatchDate').value = today;
-        document.getElementById('newItemDate').value = today;
+        try {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) throw error;
+            if (!session) {
+                window.location.href = 'index.html';
+                return;
+            }
+            currentUser = session.user.email;
+            const userInfoEl = document.getElementById('userInfo');
+            if (userInfoEl) userInfoEl.innerText = currentUser;
+            
+            await checkUserRole();
+            await loadInventory();
+            await loadLogs();
+            
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('newBatchDate').value = today;
+            document.getElementById('newItemDate').value = today;
+        } catch (e) {
+            alert("系統啟動發生錯誤：" + e.message + "\n請截圖並聯絡管理員。");
+            console.error(e);
+        }
     })();
 
     async function checkUserRole() {
-        const { data } = await supabase.from('user_roles').select('role').eq('email', currentUser).single();
-        isAdmin = (data && data.role === 'admin');
-        if (isAdmin) {
-            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-flex');
-            document.getElementById('roleLabel').innerHTML = '<span class="badge bg-red">Admin</span>';
-        } else {
-            document.getElementById('roleLabel').innerHTML = '<span class="badge bg-green">User</span>';
+        try {
+            const { data } = await supabase.from('user_roles').select('role').eq('email', currentUser).single();
+            // 如果 user_roles 沒資料，data 會是 null，不報錯，isAdmin 預設 false
+            isAdmin = (data && data.role === 'admin');
+            
+            if (isAdmin) {
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-flex');
+                const roleLabel = document.getElementById('roleLabel');
+                if(roleLabel) roleLabel.innerHTML = '<span class="badge bg-red">Admin</span>';
+            } else {
+                const roleLabel = document.getElementById('roleLabel');
+                if(roleLabel) roleLabel.innerHTML = '<span class="badge bg-green">User</span>';
+            }
+        } catch(e) {
+            console.warn("User role check failed or no role found:", e);
         }
     }
 
@@ -298,13 +308,13 @@
         event.target.classList.add('active');
     }
 
-    // 🔥 編輯模式：解鎖輸入框(品名/分類) & 啟用拖曳 & 顯示刪除按鈕
+    // 3. 編輯模式邏輯
     function toggleEditMode() {
         isEditMode = !isEditMode;
         const btn = document.getElementById('editToggleBtn');
         const delBtn = document.getElementById('btnDelete');
         const tbody = document.getElementById('stockBody');
-        const inputs = document.querySelectorAll('.edit-input'); // 選取所有編輯框
+        const inputs = document.querySelectorAll('.edit-input');
         
         if (isEditMode) {
             btn.innerHTML = '🔓 完成';
@@ -312,7 +322,6 @@
             tbody.classList.add('is-editing');
             inputs.forEach(input => input.disabled = false);
             
-            // 只有管理員在編輯模式下才看得到刪除按鈕
             if(isAdmin) delBtn.style.display = 'inline-flex';
 
             sortableInstance = Sortable.create(tbody, {
@@ -326,7 +335,6 @@
             tbody.classList.remove('is-editing');
             inputs.forEach(input => input.disabled = true);
             
-            // 離開編輯模式時隱藏刪除按鈕
             delBtn.style.display = 'none';
 
             if (sortableInstance) sortableInstance.destroy();
@@ -354,10 +362,9 @@
         }
     }
 
-    // 🔥 修改品名
     async function renameItem(oldName, newName) {
         if(!newName || newName === oldName) return;
-        if(!confirm(`確定要將 "${oldName}" 改名為 "${newName}" 嗎？\n(這會同時更新該品項的所有庫存紀錄)`)) { loadInventory(); return; }
+        if(!confirm(`確定要將 "${oldName}" 改名為 "${newName}" 嗎？`)) { loadInventory(); return; }
         try {
             const { error } = await supabase.from('inventory').update({ name: newName }).eq('name', oldName);
             if(error) throw error;
@@ -366,21 +373,18 @@
         } catch(e) { alert("改名失敗: " + e.message); loadInventory(); }
     }
 
-    // 🔥 修改分類
     async function updateCategory(name, newCat) {
         if(!newCat) return;
         try {
             const { error } = await supabase.from('inventory').update({ category: newCat }).eq('name', name);
             if(error) throw error;
-            // 為了不一直跳窗干擾，這裡改為安靜更新，只重整
             loadInventory();
         } catch(e) { alert("分類更新失敗: " + e.message); loadInventory(); }
     }
 
-    // 🔥 批量刪除功能 (上方按鈕觸發)
     async function deleteSelectedItems() {
         if(selectedItems.size === 0) return alert("請先勾選要刪除的品項");
-        if(!confirm(`❌ 警告：確定要刪除選取的 ${selectedItems.size} 個品項嗎？\n\n此動作將「永久刪除」這些品項的所有庫存資料，無法復原！`)) return;
+        if(!confirm(`❌ 警告：確定要刪除選取的 ${selectedItems.size} 個品項嗎？\n資料刪除後無法復原！`)) return;
         
         try {
             for (let name of selectedItems) {
@@ -394,11 +398,17 @@
         } catch(e) { alert("刪除失敗: " + e.message); }
     }
 
+    // 4. 資料載入與渲染
     async function loadInventory() {
         const tbody = document.getElementById('stockBody');
+        // 先顯示載入中...
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">載入中...</td></tr>';
+        
         const { data, error } = await supabase.from('inventory').select('*').order('expiry_date', { ascending: true });
-        if(error) { alert("讀取失敗"); return; }
+        if(error) { 
+            alert("資料讀取失敗: " + error.message); 
+            return; 
+        }
         rawInventory = data || [];
         groupData(rawInventory);
         updateCategoryFilter();
@@ -441,7 +451,10 @@
             return matchText && matchCat;
         });
 
-        if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">查無資料</td></tr>'; return; }
+        if (filtered.length === 0) { 
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">查無資料</td></tr>'; 
+            return; 
+        }
 
         filtered.forEach(group => {
             const validBatches = group.batches.filter(b => b.expiry_date);
@@ -515,6 +528,7 @@
         document.getElementById('selectedCount').innerText = selectedItems.size;
     }
 
+    // 5. 核心操作功能
     function openBatchCheckoutModal() {
         renderCheckoutList();
         document.getElementById('itemSearchInput').value = '';
@@ -578,4 +592,338 @@
         if (matches.length > 0) {
             resultsDiv.style.display = 'block';
             matches.forEach(g => {
-                const div = document.createElement
+                const div = document.createElement('div');
+                div.className = 'search-item';
+                div.innerHTML = `${g.name} (總庫存: ${g.totalQty})`;
+                div.onclick = () => { selectedItems.add(g.name); renderCheckoutList(); resultsDiv.style.display = 'none'; document.getElementById('itemSearchInput').value = ''; };
+                resultsDiv.appendChild(div);
+            });
+        }
+    }
+
+    async function submitBatchCheckout() {
+        const recipient = document.getElementById('batchRecipient').value.trim();
+        const note = document.getElementById('batchNote').value.trim();
+        if (!recipient) return alert("請填寫領用人");
+        let transactions = [];
+        const items = document.querySelectorAll('.checkout-item');
+        for (let item of items) {
+            const select = item.querySelector('.batch-select');
+            const input = item.querySelector('.batch-qty-input');
+            if(!select.value) continue; 
+            const batchId = select.value;
+            const qty = parseInt(input.value);
+            const batchName = item.querySelector('.checkout-item-top span').innerText;
+            const expiryText = select.options[select.selectedIndex].text;
+            const currentStock = parseInt(select.options[select.selectedIndex].dataset.max);
+            if (qty > currentStock) return alert(`${batchName} 庫存不足 (剩餘 ${currentStock})`);
+            transactions.push({ id: batchId, name: batchName, deduct: qty, newQty: currentStock - qty, expiryDisplay: expiryText });
+        }
+        if (transactions.length === 0) return alert("無有效領用項目");
+        if (!confirm("確定領出？")) return;
+        try {
+            for (let t of transactions) {
+                const { error } = await supabase.from('inventory').update({ quantity: t.newQty }).eq('id', t.id);
+                if(error) throw error;
+                await logAction('領用', t.name, t.deduct, t.newQty, t.expiryDisplay.split(' ')[0], `用途:${note}`, recipient);
+            }
+            alert("✅ 領用成功"); clearSelection(); closeModal('batchCheckoutModal'); loadInventory();
+        } catch(e) { alert("錯誤: " + e.message); }
+    }
+
+    function openDetailModal(name) {
+        const group = groupedInventory.find(g => g.name === name);
+        if(!group) return;
+        currentDetailItemName = name;
+        document.getElementById('detailTitle').innerText = name;
+        const list = document.getElementById('batchList');
+        list.innerHTML = '';
+        group.batches.sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31')).forEach(b => {
+            const li = document.createElement('li');
+            li.style.padding = '10px'; li.style.borderBottom = '1px solid #eee';
+            li.innerHTML = `📅 ${b.expiry_date||'無效期'} <span style="float:right; font-weight:bold; color:#007aff;">${b.quantity} ${group.unit}</span>`;
+            list.appendChild(li);
+        });
+        document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    async function addNewBatch() {
+        const date = document.getElementById('newBatchDate').value;
+        const qty = parseInt(document.getElementById('newBatchQty').value);
+        if(!qty) return alert("請輸入數量");
+        const group = groupedInventory.find(g => g.name === currentDetailItemName);
+        if(!confirm("確定入庫？")) return;
+        try {
+            await supabase.from('inventory').insert([{ name: group.name, category: group.category, unit: group.unit, expiry_date: date||null, quantity: qty, sort_order: group.sortOrder }]);
+            await logAction('入庫', group.name, qty, qty, date, '手動入庫', '管理員');
+            alert("成功"); loadInventory(); closeModal('detailModal');
+        } catch(e) { alert(e.message); }
+    }
+
+    async function logAction(action, name, change, final, expiry, note, operatorName) {
+        const op = operatorName || '管理員';
+        await supabase.from('inventory_logs').insert([{ product_name: name, action_type: action, change_qty: change, final_qty: final, operator: op, note: `${expiry} ${note}` }]);
+    }
+
+    async function loadLogs() {
+        const { data } = await supabase.from('inventory_logs').select('*').order('created_at', {ascending:false}).limit(50);
+        const tbody = document.getElementById('logBody');
+        tbody.innerHTML = '';
+        if(data) {
+            data.forEach(log => {
+                const date = new Date(log.created_at).toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'numeric', minute:'numeric'});
+                const color = log.action_type.includes('入') ? '#34c759' : '#ff3b30';
+                tbody.innerHTML += `<tr><td>${date.split(' ')[0]}<br>${date.split(' ')[1]}</td><td style="color:${color};font-weight:bold;">${log.action_type}</td><td>${log.product_name}</td><td>${log.change_qty}</td><td>${log.operator}</td></tr>`;
+            });
+        }
+    }
+
+    // 🔥 盤點覆蓋匯入
+    function handleExcelImport(input) {
+        const file = input.files[0];
+        if(!file) return;
+        
+        if(!confirm("⚠️⚠️ 警告 ⚠️⚠️\n\n您現在使用的是【盤點覆蓋模式】！\n\n系統將會「刪除」Excel 中所列品項的「所有舊庫存」，\n並完全依照 Excel 上的數量重新建立。\n\n確定要執行盤點修正嗎？")) {
+            input.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                let count = 0;
+                
+                const btn = document.querySelector('.btn-import');
+                const originalText = btn.innerText;
+                btn.innerText = "⏳ 處理中...";
+                btn.disabled = true;
+
+                for(let row of json) {
+                    let name = row['品名'];
+                    if(!name) continue;
+
+                    let cat = row['分類'] || '未分類';
+                    let unit = row['單位'] || '罐';
+                    let sortOrder = row['排序'] || 9999;
+
+                    if (!row['排序']) {
+                        const { data: oldData } = await supabase.from('inventory').select('sort_order').eq('name', name).limit(1);
+                        if (oldData && oldData.length > 0) sortOrder = oldData[0].sort_order;
+                    }
+
+                    await supabase.from('inventory').delete().eq('name', name);
+
+                    let itemsToInsert = [];
+                    if (row['數量'] != null || row['庫存'] != null) {
+                        itemsToInsert.push({ qty: row['數量'] || row['庫存'], date: row['有效日期'] });
+                    }
+                    for (let i = 1; i <= 10; i++) {
+                        let qtyKey = `庫存${i}`;
+                        let dateKey = `效期${i}`;
+                        if (row[qtyKey] != null && row[qtyKey] !== '') {
+                            itemsToInsert.push({ qty: row[qtyKey], date: row[dateKey] });
+                        }
+                    }
+
+                    let totalNewQty = 0;
+                    for (let item of itemsToInsert) {
+                        let finalDate = null;
+                        if (item.date) {
+                            if (typeof item.date === 'number') {
+                                finalDate = new Date(Math.round((item.date - 25569) * 86400 * 1000)).toISOString().split('T')[0];
+                            } else if (typeof item.date === 'string') {
+                                let cleanDate = item.date.trim().replace(/\//g, '-').replace('無效期', '');
+                                if (cleanDate && !isNaN(Date.parse(cleanDate))) {
+                                    finalDate = new Date(cleanDate).toISOString().split('T')[0];
+                                }
+                            }
+                        }
+
+                        if (item.qty !== null && item.qty !== '') {
+                            await supabase.from('inventory').insert([{ 
+                                name: name, category: cat, unit: unit, 
+                                quantity: item.qty, expiry_date: finalDate, sort_order: sortOrder 
+                            }]);
+                            totalNewQty += parseInt(item.qty || 0);
+                        }
+                    }
+                    
+                    if (itemsToInsert.length > 0) {
+                        await logAction('盤點', name, 0, totalNewQty, '-', 'Excel覆蓋修正', '管理員');
+                        count++;
+                    }
+                }
+
+                alert(`✅ 盤點修正完成！共更新 ${count} 個品項`); 
+                input.value = ''; 
+                btn.innerText = originalText;
+                btn.disabled = false;
+                loadInventory();
+
+            } catch(e) { 
+                alert("❌ 失敗: " + e.message); 
+                console.error(e);
+                input.value = '';
+                document.querySelector('.btn-import').innerText = "📂 匯入";
+                document.querySelector('.btn-import').disabled = false;
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function downloadBlankForm() {
+        if(groupedInventory.length === 0) return alert("無資料");
+        
+        const exportData = groupedInventory.map(group => {
+            let row = {
+                "排序": group.sortOrder,
+                "分類": group.category,
+                "品名": group.name,
+                "單位": group.unit,
+                "系統總數": group.totalQty,
+                "盤點填寫區": "" 
+            };
+
+            const validBatches = group.batches
+                .filter(b => b.quantity > 0)
+                .sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
+
+            for (let i = 0; i < 5; i++) {
+                const num = i + 1;
+                const batch = validBatches[i];
+                row[`庫存${num}`] = batch ? batch.quantity : ""; 
+                row[`效期${num}`] = batch ? (batch.expiry_date || '無效期') : "";
+            }
+            for (let i = 5; i < validBatches.length; i++) {
+                 const num = i + 1;
+                 const batch = validBatches[i];
+                 row[`庫存${num}`] = batch.quantity;
+                 row[`效期${num}`] = batch.expiry_date || '無效期';
+            }
+            return row;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let R = 1; R <= range.e.r; ++R) {
+            const cell_ref = XLSX.utils.encode_cell({c: 5, r: R});
+            const rowNum = R + 1;
+            const formula = `SUM(G${rowNum},I${rowNum},K${rowNum},M${rowNum},O${rowNum})`; 
+            if(!ws[cell_ref]) ws[cell_ref] = { t: 'n', v: 0 };
+            ws[cell_ref].f = formula;
+        }
+
+        ws['!cols'] = [
+            {wch:5}, {wch:10}, {wch:20}, {wch:5}, {wch:8}, {wch:15}, 
+            {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}
+        ];
+        const wb = XLSX.utils.book_new(); 
+        XLSX.utils.book_append_sheet(wb, ws, "盤點單");
+        XLSX.writeFile(wb, `盤點表_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+
+    function exportStock() {
+        if(groupedInventory.length === 0) return alert("無資料");
+        const exportData = groupedInventory.map(group => {
+            let row = {
+                "排序": group.sortOrder,
+                "分類": group.category,
+                "品名": group.name,
+                "總庫存": group.totalQty,
+                "單位": group.unit
+            };
+
+            const validBatches = group.batches
+                .filter(b => b.quantity > 0)
+                .sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
+
+            for (let i = 0; i < 5; i++) {
+                const num = i + 1;
+                const batch = validBatches[i];
+                row[`庫存${num}`] = batch ? batch.quantity : ""; 
+                row[`效期${num}`] = batch ? (batch.expiry_date || '無效期') : "";
+            }
+            for (let i = 5; i < validBatches.length; i++) {
+                 const num = i + 1;
+                 const batch = validBatches[i];
+                 row[`庫存${num}`] = batch.quantity;
+                 row[`效期${num}`] = batch.expiry_date || '無效期';
+            }
+            return row;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "庫存總表");
+        XLSX.writeFile(wb, `庫存總表_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+
+    function exportExpiringReport() {
+        const today = new Date();
+        const expiringItems = groupedInventory.filter(group => {
+            return group.batches.some(b => {
+                if (!b.expiry_date) return false;
+                const days = (new Date(b.expiry_date) - today) / (1000 * 60 * 60 * 24);
+                return days <= 30; 
+            });
+        });
+
+        if (expiringItems.length === 0) return alert("✅ 目前沒有 30 天內的即期品！");
+
+        const exportData = expiringItems.map(group => {
+            let row = {
+                "排序": group.sortOrder,
+                "分類": group.category,
+                "品名": group.name,
+                "總庫存": group.totalQty,
+                "單位": group.unit
+            };
+
+            const validBatches = group.batches
+                .filter(b => b.quantity > 0)
+                .sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
+
+            for (let i = 0; i < 5; i++) {
+                const num = i + 1;
+                const batch = validBatches[i];
+                row[`庫存${num}`] = batch ? batch.quantity : ""; 
+                row[`效期${num}`] = batch ? (batch.expiry_date || '無效期') : "";
+            }
+            return row;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "即期品清單");
+        XLSX.writeFile(wb, `即期品報表_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+
+    async function exportLogs() {
+        const { data } = await supabase.from('inventory_logs').select('*').order('created_at', {ascending:false}).limit(1000);
+        if(!data || data.length === 0) return alert("無紀錄");
+        const exportData = data.map(l => ({ 
+            "時間": new Date(l.created_at).toLocaleString(), "動作": l.action_type, 
+            "品名": l.product_name, "異動": l.change_qty, "備註": l.note, "人員": l.operator 
+        }));
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "紀錄");
+        XLSX.writeFile(wb, `庫存紀錄_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+
+    function openNewItemModal() { document.getElementById('newItemModal').style.display = 'flex'; }
+    async function submitNewItem() {
+        const name = document.getElementById('newItemName').value;
+        const qty = document.getElementById('newItemQty').value;
+        if(!name) return;
+        await supabase.from('inventory').insert([{ name: name, category: document.getElementById('newCat').value, unit: document.getElementById('newUnit').value, expiry_date: document.getElementById('newItemDate').value || null, quantity: qty, sort_order: 9999 }]);
+        await logAction('建檔', name, qty, qty, document.getElementById('newItemDate').value || null, '新增品項', '管理員');
+        alert("已新增"); closeModal('newItemModal'); loadInventory();
+    }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+</script>
+</body>
+</html>
