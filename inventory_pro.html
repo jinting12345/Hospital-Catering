@@ -511,7 +511,8 @@
             for (let t of transactions) {
                 const { error } = await supabase.from('inventory').update({ quantity: t.newQty }).eq('id', t.id);
                 if(error) throw error;
-                await logAction('領用', t.name, t.deduct, t.newQty, t.expiryDisplay.split(' ')[0], `領:${recipient} 用:${note}`);
+                // 🔥 修正日誌紀錄邏輯：傳入領用人姓名 (recipient)
+                await logAction('領用', t.name, t.deduct, t.newQty, t.expiryDisplay.split(' ')[0], `用途:${note}`, recipient);
             }
             alert("✅ 領用成功"); clearSelection(); closeModal('batchCheckoutModal'); loadInventory();
         } catch(e) { alert("錯誤: " + e.message); }
@@ -541,13 +542,19 @@
         if(!confirm("確定入庫？")) return;
         try {
             await supabase.from('inventory').insert([{ name: group.name, category: group.category, unit: group.unit, expiry_date: date||null, quantity: qty, sort_order: group.sortOrder }]);
-            await logAction('入庫', group.name, qty, qty, date, '手動入庫');
+            // 🔥 修正日誌紀錄邏輯：入庫統一為「管理員」
+            await logAction('入庫', group.name, qty, qty, date, '手動入庫', '管理員');
             alert("成功"); loadInventory(); closeModal('detailModal');
         } catch(e) { alert(e.message); }
     }
 
-    async function logAction(action, name, change, final, expiry, note) {
-        await supabase.from('inventory_logs').insert([{ product_name: name, action_type: action, change_qty: change, final_qty: final, operator: currentUser, note: `${expiry} ${note}` }]);
+    // 🔥 修正日誌函式：接受 operatorName 參數
+    async function logAction(action, name, change, final, expiry, note, operatorName) {
+        const op = operatorName || '管理員'; // 預設管理員
+        await supabase.from('inventory_logs').insert([{ 
+            product_name: name, action_type: action, change_qty: change, 
+            final_qty: final, operator: op, note: `${expiry} ${note}` 
+        }]);
     }
 
     async function loadLogs() {
@@ -558,7 +565,8 @@
             data.forEach(log => {
                 const date = new Date(log.created_at).toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'numeric', minute:'numeric'});
                 const color = log.action_type.includes('入') ? '#34c759' : '#ff3b30';
-                tbody.innerHTML += `<tr><td>${date.split(' ')[0]}<br>${date.split(' ')[1]}</td><td style="color:${color};font-weight:bold;">${log.action_type}</td><td>${log.product_name}</td><td>${log.change_qty}</td><td>${log.operator.split('@')[0]}</td></tr>`;
+                // 直接顯示 operator 欄位，不再使用 split (因為現在是存中文名字)
+                tbody.innerHTML += `<tr><td>${date.split(' ')[0]}<br>${date.split(' ')[1]}</td><td style="color:${color};font-weight:bold;">${log.action_type}</td><td>${log.product_name}</td><td>${log.change_qty}</td><td>${log.operator}</td></tr>`;
             });
         }
     }
@@ -591,10 +599,8 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // 🔥 盤點表 (Check Sheet) 也要套用 1-5 欄位邏輯
     function downloadBlankForm() {
         if(groupedInventory.length === 0) return alert("無資料");
-        
         const exportData = groupedInventory.map(group => {
             let row = {
                 "排序": group.sortOrder,
@@ -602,21 +608,15 @@
                 "品名": group.name,
                 "單位": group.unit,
                 "系統總數": group.totalQty,
-                "盤點填寫區": "" // 給人手寫的空白格
+                "盤點填寫區": "" 
             };
-
-            const validBatches = group.batches
-                .filter(b => b.quantity > 0)
-                .sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
-
-            // 固定 1 到 5
+            const validBatches = group.batches.filter(b => b.quantity > 0).sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
             for (let i = 0; i < 5; i++) {
                 const num = i + 1;
                 const batch = validBatches[i];
                 row[`庫存${num}`] = batch ? batch.quantity : ""; 
                 row[`效期${num}`] = batch ? (batch.expiry_date || '無效期') : "";
             }
-            // 超過 5 筆繼續加
             for (let i = 5; i < validBatches.length; i++) {
                  const num = i + 1;
                  const batch = validBatches[i];
@@ -625,13 +625,8 @@
             }
             return row;
         });
-
         const ws = XLSX.utils.json_to_sheet(exportData);
-        // 設定欄寬 (讓列印比較好看)
-        ws['!cols'] = [
-            {wch:5}, {wch:10}, {wch:20}, {wch:5}, {wch:8}, {wch:15}, // 基本欄位 + 填寫區
-            {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12} // 1-5 的庫存效期
-        ];
+        ws['!cols'] = [{wch:5}, {wch:10}, {wch:20}, {wch:5}, {wch:8}, {wch:15}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}, {wch:6}, {wch:12}];
         const wb = XLSX.utils.book_new(); 
         XLSX.utils.book_append_sheet(wb, ws, "盤點單");
         XLSX.writeFile(wb, `盤點表_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -647,11 +642,7 @@
                 "總庫存": group.totalQty,
                 "單位": group.unit
             };
-
-            const validBatches = group.batches
-                .filter(b => b.quantity > 0)
-                .sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
-
+            const validBatches = group.batches.filter(b => b.quantity > 0).sort((a,b) => new Date(a.expiry_date||'9999-12-31') - new Date(b.expiry_date||'9999-12-31'));
             for (let i = 0; i < 5; i++) {
                 const num = i + 1;
                 const batch = validBatches[i];
@@ -664,10 +655,8 @@
                  row[`庫存${num}`] = batch.quantity;
                  row[`效期${num}`] = batch.expiry_date || '無效期';
             }
-
             return row;
         });
-
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "庫存總表");
@@ -692,6 +681,8 @@
         const qty = document.getElementById('newItemQty').value;
         if(!name) return;
         await supabase.from('inventory').insert([{ name: name, category: document.getElementById('newCat').value, unit: document.getElementById('newUnit').value, expiry_date: document.getElementById('newItemDate').value || null, quantity: qty, sort_order: 9999 }]);
+        // 🔥 修正日誌紀錄邏輯：建檔統一為「管理員」
+        await logAction('建檔', name, qty, qty, document.getElementById('newItemDate').value || null, '新增品項', '管理員');
         alert("已新增"); closeModal('newItemModal'); loadInventory();
     }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
