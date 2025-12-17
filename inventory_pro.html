@@ -35,11 +35,16 @@
         /* 按鈕群組 */
         .btn-group { display: flex; gap: 5px; flex-wrap: wrap; width: 100%; margin-top: 5px; }
         .action-btn { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.85em; }
+        
         .btn-in { background: #34c759; } 
         .btn-out { background: #ff3b30; } 
         .btn-import { background: #007aff; } 
         .btn-export { background: #5856d6; } 
         .btn-stocktake { background: #ff9500; } 
+        
+        /* 🔥 "詳情" 按鈕改為淡綠色 */
+        .btn-detail { background: #4cd964; color: white; } 
+
         .btn-lock { background: #6c757d; color: white; }
         .btn-lock.editing { background: #dc3545; }
         .admin-only { display: none; }
@@ -78,6 +83,7 @@
             
             /* 操作與隱藏 */
             .action-cell { width: auto; text-align: right; }
+            /* 手機版詳情按鈕稍微調小一點點 */
             .btn-detail { padding: 6px 10px; font-size: 13px; }
             .desktop-only-cell { display: none !important; }
         }
@@ -601,7 +607,7 @@
         const file = input.files[0];
         if(!file) return;
         
-        if(!confirm("⚠️⚠️ 超級重要警告 ⚠️⚠️\n\n您現在使用的是【盤點覆蓋模式】！\n\n系統將會「刪除」Excel 中所列品項的「所有舊庫存」，\n並完全依照 Excel 上的數量重新建立。\n\n例如：Excel 寫安素 2 罐，系統就會變成 2 罐 (不管原本有幾罐)。\n\n確定要執行盤點修正嗎？")) {
+        if(!confirm("⚠️⚠️ 警告 ⚠️⚠️\n\n您現在使用的是【盤點覆蓋模式】！\n\n系統將會「刪除」Excel 中所列品項的「所有舊庫存」，\n並完全依照 Excel 上的數量重新建立。\n\n確定要執行盤點修正嗎？")) {
             input.value = '';
             return;
         }
