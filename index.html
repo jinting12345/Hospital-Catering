@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>系統登入 (強效修復版)</title>
+    <title>營養科系統登入</title>
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 360px; text-align: center; }
@@ -60,7 +60,7 @@
         } catch (e) {
             statusEl.innerText = "❌ 載入失敗";
             msg.innerText = "系統被瀏覽器阻擋: " + e.message;
-            alert("嚴重錯誤：瀏覽器完全阻擋了程式執行。\n請嘗試關閉 Kiwi 的廣告阻擋功能。");
+            alert("嚴重錯誤：瀏覽器完全阻擋了程式執行。");
         }
 
         // 2. 綁定登入事件
