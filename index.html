@@ -21,40 +21,58 @@
         <h2>🏥 義大營養科資訊系統</h2>
         <input type="email" id="email" placeholder="帳號 (Email)">
         <input type="password" id="password" placeholder="密碼">
-        <button onclick="handleLogin()" id="loginBtn">登入系統</button>
-        <div id="msg" class="error"></div>
+        <button id="loginBtn">登入系統</button> <div id="msg" class="error"></div>
     </div>
 
     <script>
-        // 1. 初始化設定
+        // ★★★ 1. 全域錯誤攔截 (讓手機也能看到報錯) ★★★
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert("⚠️ 系統發生錯誤：\n" + message);
+            return false;
+        };
+
         function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
         const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
         const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; 
 
-        // 2. 防火牆/網路檢查：如果 Supabase 沒載入，直接鎖死按鈕並警告
-        if (typeof window.supabase === 'undefined') {
-            alert("❌ 嚴重錯誤：無法連線至系統主機！\n\n原因可能是：\n1. 醫院/公司防火牆封鎖了連線\n2. 網路訊號不穩\n\n請嘗試使用手機 4G 網路。");
+        // ★★★ 2. 檢查 Supabase 是否成功載入 ★★★
+        // 如果瀏覽器擋擋廣告插件或防火牆擋住 CDN，這裡會直接報錯提醒
+        let supabase;
+        try {
+            if (typeof window.supabase === 'undefined') {
+                throw new Error("Supabase 函式庫未載入，請檢查網路連線或防火牆設定。");
+            }
+            supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
+        } catch (e) {
+            document.getElementById('msg').innerText = "❌ 系統元件載入失敗";
             document.getElementById('loginBtn').disabled = true;
-            document.getElementById('loginBtn').innerText = "無法連線";
-            throw new Error("Supabase SDK not loaded");
+            document.getElementById('loginBtn').innerText = "無法使用";
+            alert(e.message);
         }
-        
-        const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
 
-        // 3. 自動登出邏輯 (只清 Session，不暴力清 localStorage)
+        // 自動登出檢查
         (async () => {
+            if (!supabase) return;
             try {
                 const { data } = await supabase.auth.getSession();
                 if (data.session) {
                     await supabase.auth.signOut();
-                    console.log("已自動登出舊的工作階段");
                 }
             } catch (e) {
-                console.warn("初始化檢查:", e);
+                console.warn("自動登出異常:", e);
             }
         })();
 
+        // ★★★ 3. 改用 EventListener 綁定按鈕 (比較穩定) ★★★
+        document.getElementById('loginBtn').addEventListener('click', handleLogin);
+
         async function handleLogin() {
+            // 如果 supabase 沒初始化成功，直接停止
+            if (!supabase) {
+                alert("系統初始化失敗，請重新整理網頁。");
+                return;
+            }
+
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value.trim();
             const btn = document.getElementById('loginBtn');
@@ -71,47 +89,40 @@
             msg.innerText = "";
             
             try {
-                // 4. 執行登入
+                // 執行登入
                 const { data, error } = await supabase.auth.signInWithPassword({ email, password });
                 
                 if (error) {
-                    throw error; // 拋出錯誤到 catch 處理
-                }
+                    // ★★★ 4. 針對錯誤類型給出更明確提示 ★★★
+                    console.error("登入錯誤:", error);
+                    let showMsg = "帳號或密碼錯誤";
+                    
+                    if (error.message.includes("Failed to fetch") || error.message.includes("Network")) {
+                        showMsg = "❌ 無法連線伺服器 (網路問題)";
+                        alert("您的裝置無法連線至資料庫。\n請嘗試切換 Wi-Fi 或使用 4G 網路。");
+                    }
 
-                // 5. 登入成功，測試資料庫連線 (這步很重要，確認網路真的通)
-                btn.innerText = "讀取資料中...";
-                try {
-                    // 嘗試讀取一筆資料，確認 RLS 權限和網路都沒問題
-                    await supabase.from('user_roles').select('role').limit(1).single();
-                } catch (readError) {
-                    console.warn("資料庫讀取警告 (非致命):", readError);
-                    // 這裡不擋，因為可能是新帳號還沒權限，讓他進去 menu 再說
-                }
-
-                // 6. 跳轉
-                msg.style.color = "green";
-                msg.innerText = "登入成功！跳轉中...";
-                // alert("✅ 登入成功！"); // 手機上有時候 alert 會比 DOM 更新更穩
-                setTimeout(() => {
-                    window.location.href = 'menu.html';
-                }, 300);
-
-            } catch (err) {
-                console.error("登入錯誤:", err);
-                
-                // 根據錯誤類型給出提示
-                let errorMsg = "帳號或密碼錯誤";
-                if (err.message.includes("Failed to fetch") || err.message.includes("Network")) {
-                    errorMsg = "❌ 網路連線失敗 (可能被防火牆阻擋)";
-                    alert(errorMsg + "\n請嘗試切換手機網路試試看。");
-                } else if (err.message.includes("Invalid login")) {
-                    errorMsg = "帳號或密碼錯誤";
+                    msg.innerText = showMsg;
+                    btn.disabled = false; 
+                    btn.innerText = "登入系統";
                 } else {
-                    errorMsg = "系統錯誤: " + err.message;
-                }
+                    // 登入成功
+                    msg.style.color = "green";
+                    msg.innerText = "✅ 驗證成功，資料讀取中...";
+                    
+                    // 簡單測試連線權限 (確認 RLS 沒擋)
+                    try {
+                        await supabase.from('user_roles').select('role').limit(1).single();
+                    } catch(e) { console.log("權限預讀警告:", e); }
 
-                msg.innerText = errorMsg;
-                msg.style.color = "red";
+                    setTimeout(() => {
+                        window.location.href = 'menu.html';
+                    }, 300);
+                }
+            } catch (err) {
+                console.error("系統崩潰:", err);
+                msg.innerText = "系統發生未知錯誤";
+                alert("系統發生例外錯誤：" + err.message);
                 btn.disabled = false; 
                 btn.innerText = "登入系統";
             }
