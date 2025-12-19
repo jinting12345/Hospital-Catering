@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -13,7 +14,7 @@
         button { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.3s; }
         button:hover { background: #1557b0; }
         button:disabled { background: #ccc; cursor: not-allowed; }
-        .error { color: red; font-size: 14px; margin-top: 10px; min-height: 20px;}
+        .error { color: red; font-size: 14px; margin-top: 10px; min-height: 20px; word-wrap: break-word;}
     </style>
 </head>
 <body>
@@ -21,14 +22,15 @@
         <h2>🏥 義大營養科資訊系統</h2>
         <input type="email" id="email" placeholder="帳號 (Email)">
         <input type="password" id="password" placeholder="密碼">
-        <button id="loginBtn">登入系統</button>
+        <button id="loginBtn">登入系統</button> 
         <div id="msg" class="error"></div>
     </div>
 
     <script>
-        // 全域錯誤監聽：如果程式爆掉，直接彈窗告訴我們原因
+        // 【除錯第一道防線】全域錯誤攔截
+        // 只要有任何 JS 錯誤，直接跳窗顯示，不再讓手機默默沒反應
         window.onerror = function(message, source, lineno, colno, error) {
-            alert("⚠️ 程式發生錯誤：\n" + message);
+            alert("⚠️ 系統發生嚴重錯誤：\n" + message + "\n行數：" + lineno);
             return false;
         };
 
@@ -37,28 +39,46 @@
 
         let supabase;
 
-        // 初始化 Supabase
+        // 【除錯第二道防線】檢查 Supabase 是否被防火牆擋住
         try {
             if (typeof window.supabase === 'undefined') {
-                throw new Error("Supabase 函式庫未載入，請檢查網路連線。");
+                throw new Error("Supabase 核心元件載入失敗！\n您的網路可能封鎖了 CDN 連線。");
             }
             supabase = window.supabase.createClient(RAW_URL, RAW_KEY);
+            console.log("Supabase 初始化成功");
         } catch (e) {
-            document.getElementById('msg').innerText = "❌ 系統元件載入失敗";
+            document.getElementById('msg').innerText = "❌ 系統無法啟動";
             document.getElementById('loginBtn').disabled = true;
-            document.getElementById('loginBtn').innerText = "無法使用";
+            document.getElementById('loginBtn').innerText = "系統損壞";
             alert(e.message);
         }
 
-        // 綁定按鈕事件
+        // 自動登出舊 Session (加強版，防止報錯)
+        (async () => {
+            if (!supabase) return;
+            try {
+                const { data } = await supabase.auth.getSession();
+                if (data && data.session) {
+                    await supabase.auth.signOut();
+                    console.log("已清除舊登入狀態");
+                }
+            } catch (e) {
+                console.warn("自動登出時發生小錯誤 (可忽略):", e);
+            }
+        })();
+
+        // 【除錯第三道防線】使用 addEventListener 綁定按鈕
         const btn = document.getElementById('loginBtn');
         if (btn) {
             btn.addEventListener('click', handleLogin);
+        } else {
+            alert("錯誤：找不到登入按鈕");
         }
 
         async function handleLogin() {
+            // 再次檢查核心是否載入
             if (!supabase) {
-                alert("系統未正確初始化，請重新整理頁面。");
+                alert("系統未正確初始化，請檢查網路並重新整理。");
                 return;
             }
 
@@ -67,10 +87,11 @@
             const msg = document.getElementById('msg');
             
             if (!email || !password) {
-                msg.innerText = "請輸入帳號密碼";
+                msg.innerText = "請輸入帳號與密碼";
                 return;
             }
 
+            // 鎖定按鈕，避免重複點擊
             btn.disabled = true; 
             btn.innerText = "驗證中..."; 
             msg.innerText = "";
@@ -80,17 +101,18 @@
                 const { data, error } = await supabase.auth.signInWithPassword({ email, password });
                 
                 if (error) {
-                    console.error("登入錯誤:", error);
+                    console.error("登入錯誤細節:", error);
+                    
                     let showMsg = "帳號或密碼錯誤";
                     
-                    // 判斷是否為網路錯誤
+                    // 判斷是否為網路錯誤 (防火牆/斷網)
                     if (error.message.includes("Failed to fetch") || error.message.includes("Network")) {
-                        showMsg = "❌ 無法連線伺服器 (網路問題)";
-                        alert("您的裝置無法連線至資料庫。\n請嘗試切換 Wi-Fi 或使用 4G 網路。");
+                        showMsg = "❌ 無法連線伺服器";
+                        alert("⚠️ 網路連線失敗！\n\n您的裝置無法連線至資料庫，這通常是因為：\n1. 醫院/公司防火牆阻擋\n2. 網路訊號不良\n\n請切換成手機 4G 網路再試一次。");
                     } else if (error.message.includes("Invalid login")) {
                         showMsg = "帳號或密碼錯誤";
                     } else {
-                        showMsg = error.message;
+                        showMsg = "錯誤: " + error.message;
                     }
 
                     msg.innerText = showMsg;
@@ -99,21 +121,22 @@
                 } else {
                     // 登入成功
                     msg.style.color = "green";
-                    msg.innerText = "✅ 驗證成功，跳轉中...";
+                    msg.innerText = "✅ 驗證成功，正在進入系統...";
                     
-                    // 簡單測試連線權限 (非必要，但可確認網路暢通)
+                    // 嘗試讀取一個簡單的資料，確認資料庫連線權限
                     try {
                         await supabase.from('user_roles').select('role').limit(1).single();
-                    } catch(e) { console.log("權限預讀警告:", e); }
+                    } catch(e) { console.log("權限預讀測試:", e); }
 
                     setTimeout(() => {
                         window.location.href = 'menu.html';
                     }, 500);
                 }
             } catch (err) {
+                // 捕捉所有未預期的錯誤
                 console.error("系統例外錯誤:", err);
-                msg.innerText = "系統發生未知錯誤";
-                alert("系統發生例外錯誤：" + err.message);
+                msg.innerText = "系統發生例外錯誤";
+                alert("⚠️ 系統發生例外錯誤：\n" + err.message);
                 btn.disabled = false; 
                 btn.innerText = "登入系統";
             }
