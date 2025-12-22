@@ -4,8 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>便當上傳</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.js"></script>
+    
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+        window.createClient = createClient; // 掛載到全域
+    </script>
+
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; padding: 20px; background: #f8f9fa; max-width: 600px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -23,13 +29,8 @@
         
         .upload-area { display: none; margin-top: 15px; text-align: center; }
         
-        /* 修改按鈕容器樣式，讓兩個按鈕並排 */
         .action-buttons { display: flex; gap: 10px; margin: 15px 0; }
-        
-        /* 拍照按鈕 (綠色) */
         .camera-btn { flex: 1; background: #28a745; color: white; padding: 12px; border-radius: 30px; border: none; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
-        
-        /* 相簿按鈕 (橘色或藍色) */
         .gallery-btn { flex: 1; background: #ffc107; color: #333; padding: 12px; border-radius: 30px; border: none; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; font-weight: bold; }
 
         #preview { width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin-top: 10px; display: none; }
@@ -39,7 +40,7 @@
 <body>
     <div class="header">
         <a href="menu.html" class="back-btn">⬅ 回選單</a>
-        <button onclick="handleLogout()" class="logout-btn">登出</button>
+        <button id="logoutBtn" class="logout-btn">登出</button>
     </div>
 
     <div class="section">
@@ -82,17 +83,44 @@
     </div>
 
     <script>
+        // 全域錯誤處理
+        window.onerror = function(msg, src, line) {
+            alert("⚠️ 錯誤: " + msg);
+            return false;
+        };
+
         const BUCKET_NAME = 'private_photos'; 
-        
-        function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
         const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
         const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
-        const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
-
+        
+        let supabase = null;
         let curTarget = '', curMeal = '', processedFile = null;
 
-        // 初始化
-        (async () => {
+        // 🔥 修改 3: 初始化邏輯 (等待 ESM)
+        window.onload = async () => {
+            setTimeout(async () => {
+                try {
+                    if (window.createClient) {
+                        supabase = window.createClient(RAW_URL, RAW_KEY);
+                        await initApp();
+                    } else {
+                        throw new Error("Supabase 元件載入失敗");
+                    }
+                } catch(e) {
+                    alert("⚠️ 系統元件被阻擋，無法使用上傳功能。\n請檢查瀏覽器設定。");
+                    // 強制綁定登出回首頁
+                    document.getElementById('logoutBtn').onclick = () => window.location.href = 'index.html';
+                }
+            }, 100);
+        };
+
+        async function initApp() {
+            // 綁定登出
+            document.getElementById('logoutBtn').onclick = async () => {
+                await supabase.auth.signOut();
+                window.location.href = 'index.html';
+            };
+
             const { data } = await supabase.auth.getSession();
             if(!data.session) window.location.href = 'index.html';
             
@@ -101,9 +129,7 @@
             const mm = String(today.getMonth() + 1).padStart(2, '0');
             const dd = String(today.getDate()).padStart(2, '0');
             document.getElementById('dateInput').value = `${yyyy}-${mm}-${dd}`;
-        })();
-
-        async function handleLogout() { await supabase.auth.signOut(); window.location.href = 'index.html'; }
+        }
 
         function selectTarget(type) {
             curTarget = type;
@@ -177,13 +203,17 @@
             });
         }
 
-        // 圖片處理邏輯
         async function processImage(inputElement) {
             const file = inputElement.files[0]; 
             if(!file) return;
             document.getElementById('status').innerText = '處理中 (壓縮+壓字)...';
             
             try {
+                // 檢查 browser-image-compression 是否載入
+                if (typeof imageCompression === 'undefined') {
+                    throw new Error("圖片壓縮元件未載入，請重新整理");
+                }
+
                 const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
                 const compressed = await imageCompression(file, options);
                 
@@ -205,17 +235,18 @@
 
             } catch(e) { 
                 console.error(e);
-                alert('圖片處理失敗，請重試'); 
+                alert('圖片處理失敗: ' + e.message); 
+                document.getElementById('status').innerText = '❌ 圖片處理失敗';
             }
         }
 
-        // 🔥 重點修改：上傳與覆蓋邏輯
         async function uploadData() {
             if(!processedFile) return;
+            if(!supabase) { alert("系統未連線"); return; }
+
             const btn = document.getElementById('submitBtn');
             const date = document.getElementById('dateInput').value;
             
-            // 顯示用名稱
             const tName = curTarget === 'nursing' ? '護家餐' : '病患餐';
             const mName = curMeal === 'breakfast' ? '早餐' : curMeal === 'lunch' ? '午餐' : '晚餐';
 
@@ -227,7 +258,7 @@
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) throw new Error("無法取得使用者資訊");
 
-                // 1. 檢查是否已存在該時段資料
+                // 1. 檢查是否已存在
                 const { data: existingRecord, error: checkError } = await supabase
                     .from('meal_records')
                     .select('id, photo_path')
@@ -238,27 +269,23 @@
 
                 if (checkError) throw new Error('檢查重複失敗: ' + checkError.message);
 
-                // 2. 如果存在，跳出警告並要求輸入「覆蓋」
+                // 2. 詢問覆蓋
                 if (existingRecord) {
                     const userInput = prompt(`⚠️ 警告：重複上傳！\n\n【${date} ${tName} ${mName}】已經有照片了。\n\n若確定要用這張新照片「覆蓋」舊的，請在下方輸入 "覆蓋" 二字：`);
 
                     if (userInput !== "覆蓋") {
-                        // 取消或輸入錯誤
                         btn.disabled = false;
                         btn.innerText = '確認上傳';
                         document.getElementById('status').innerText = '🚫 已取消上傳 (未覆蓋)';
-                        return; // 中斷流程
+                        return; 
                     }
 
-                    // 3. 確認覆蓋，開始刪除舊資料
                     document.getElementById('status').innerText = '🗑️ 正在刪除舊資料...';
 
-                    // 刪除 Storage 舊檔
                     if (existingRecord.photo_path) {
                         await supabase.storage.from(BUCKET_NAME).remove([existingRecord.photo_path]);
                     }
 
-                    // 刪除 DB 舊紀錄
                     const { error: delErr } = await supabase
                         .from('meal_records')
                         .delete()
@@ -267,7 +294,7 @@
                     if (delErr) throw new Error('舊資料刪除失敗: ' + delErr.message);
                 }
 
-                // 4. 開始上傳新資料
+                // 3. 上傳新資料
                 btn.innerText = '上傳中...';
                 document.getElementById('status').innerText = '⏳ 正在上傳新照片...';
 
