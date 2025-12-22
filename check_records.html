@@ -3,136 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>查看照片紀錄</title>
+    <title>查看照片紀錄 (智慧雙模式)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
     <style>
-        /* --- 基礎設定 --- */
-        body { font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif; background: #f2f4f8; margin: 0; padding: 10px; color: #333; -webkit-tap-highlight-color: transparent; }
-        .container { max-width: 800px; margin: 0 auto; padding-bottom: 90px; }
+        /* --- 全域設定 --- */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif; background: #f2f4f8; margin: 0; padding: 15px; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding-bottom: 80px; }
         
-        .btn-back { background-color: #6c757d; text-decoration: none; padding: 6px 12px; border-radius: 4px; color: white; font-size: 13px; font-weight: bold; display: inline-block; margin-bottom: 10px; }
+        .btn-back { background-color: #6c757d; text-decoration: none; padding: 8px 15px; border-radius: 6px; color: white; font-size: 14px; font-weight: bold; display: inline-flex; align-items: center; margin-bottom: 15px; }
 
-        /* --- 迷你資訊列 --- */
+        /* --- 資訊列 --- */
         .info-bar { 
-            background: white; 
-            padding: 8px 15px; 
-            border-radius: 8px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 10px; 
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
-            font-size: 13px;
-            border-left: 4px solid #007aff;
+            background: white; padding: 12px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 5px solid #007aff;
         }
-        .info-label { color: #666; margin-right: 5px; }
-        .info-val { font-weight: bold; color: #333; }
-        .info-alert { color: #f59e0b; font-weight:bold; margin-left: 5px; }
+        .info-label { color: #666; margin-right: 5px; font-size: 14px; }
+        .info-val { font-weight: bold; color: #333; font-size: 16px; }
+        .info-alert { color: #f59e0b; font-weight:bold; margin-left: 5px; font-size: 14px; }
 
-        /* --- 🔥 修改：週導航控制器 (加入搜尋) --- */
-        .week-nav { 
-            background: white; 
-            padding: 5px; 
-            border-radius: 10px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; 
-            margin-bottom: 12px; 
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
-        }
-        
-        .nav-btn { 
-            background: #f0f2f5; 
-            color: #007aff; 
-            border: none; 
-            width: 40px; 
-            height: 40px; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            font-size: 18px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-        }
-        .nav-btn:active { background: #dce4f0; }
+        /* =========================================
+           🖥️ 電腦版樣式 (表格模式)
+           ========================================= */
+        .desktop-controls { background: white; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .desktop-controls select, .desktop-controls input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 15px; }
+        .btn-search { background: #007aff; color: white; border: none; padding: 8px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; }
 
-        /* 隱藏的日期輸入框，覆蓋在文字上面 */
-        .date-picker-wrapper {
-            position: relative;
-            flex: 1;
-            text-align: center;
-            height: 40px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            cursor: pointer;
-        }
-        
-        /* 讓 input 透明並蓋在文字上，這樣點擊文字就能觸發日曆 */
-        .hidden-date-input {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-            z-index: 10;
-        }
+        .table-wrapper { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 15px; text-align: center; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; color: #555; font-weight: bold; }
+        tr:hover { background-color: #f1f7ff; }
+        .status-icon { font-size: 1.2em; cursor: pointer; }
+        .ok { color: #28a745; }
+        .no { color: #dc3545; opacity: 0.2; }
+        .weekend-row { background-color: #fffbf0; }
 
-        .date-range { font-weight: bold; color: #333; font-size: 1em; pointer-events: none; /* 讓點擊穿透到 input */ }
-        .date-range small { display: inline-block; color: #007aff; font-size: 0.8em; margin-left: 5px; font-weight: normal;}
+        .staff-input-desk { border: 1px solid transparent; background: transparent; text-align: center; width: 100%; font-size: 14px; font-weight: bold; padding: 5px; border-radius: 4px; }
+        .staff-input-desk:hover { border: 1px solid #ccc; background: white; }
+        .staff-input-desk:focus { border: 1px solid #007aff; background: white; outline: none; }
 
-        /* --- 卡片式列表 --- */
-        .record-list { display: flex; flex-direction: column; gap: 10px; }
-        .day-card { background: white; border-radius: 10px; padding: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid #eee; position: relative; }
+        /* =========================================
+           📱 手機版樣式 (卡片模式)
+           ========================================= */
+        .mobile-only { display: none; } /* 預設隱藏 */
+
+        .week-nav { background: white; padding: 5px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .nav-btn { background: #f0f2f5; color: #007aff; border: none; width: 45px; height: 45px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+        .date-picker-wrapper { position: relative; flex: 1; text-align: center; height: 45px; display: flex; flex-direction: column; justify-content: center; }
+        .hidden-date-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+        .date-range { font-weight: bold; color: #333; font-size: 1.1em; }
+        .date-range small { display: inline-block; color: #007aff; font-size: 0.8em; margin-left: 5px; font-weight: normal; }
+
+        .day-card { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eee; margin-bottom: 12px; }
         .day-card.weekend { background-color: #fffbf0; border-color: #faeacc; }
-
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dashed #eee; }
         
-        .date-title { font-size: 1em; font-weight: bold; color: #007aff; display: flex; align-items: center; gap: 8px; }
-        .date-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #007aff; }
-
-        .staff-row { display: flex; align-items: center; gap: 3px; font-size: 0.85em; color: #555; }
-        .staff-input { border: 1px solid #ddd; background: #f9f9f9; padding: 2px 5px; border-radius: 4px; width: 60px; text-align: center; font-weight: bold; color: #333; font-size: 13px; }
-        .staff-input:focus { border-color: #007aff; background: white; outline: none; }
-
-        /* --- 餐點網格 --- */
-        .meal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-        .meal-box { 
-            background: #f8f9fa; 
-            border-radius: 6px; 
-            padding: 5px 2px; 
-            text-align: center; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            gap: 2px; 
-            cursor: pointer; 
-            border: 1px solid transparent; 
-        }
-        .meal-box:active { transform: scale(0.95); background: #eef; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #eee; }
+        .date-title { font-size: 1.1em; font-weight: bold; color: #007aff; display: flex; align-items: center; gap: 8px; }
+        .date-checkbox { width: 20px; height: 20px; accent-color: #007aff; }
         
+        .staff-row { display: flex; align-items: center; gap: 5px; font-size: 0.9em; color: #555; }
+        .staff-input-mobile { border: 1px solid #ddd; background: #f9f9f9; padding: 4px 8px; border-radius: 4px; width: 80px; text-align: center; font-weight: bold; color: #333; }
+
+        .meal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .meal-box { background: #f8f9fa; border-radius: 8px; padding: 8px 4px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+        .meal-box:active { background: #eef; }
         .meal-title { font-size: 11px; color: #666; }
-        
-        .status-dot { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; }
-        .ok { background: #e6fffa; color: #00b894; border: 1px solid #b2f5ea; } 
-        .no { background: #fff5f5; color: #fc8181; border: 1px solid #fed7d7; } 
+        .status-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        .dot-ok { background: #e6fffa; color: #00b894; border: 1px solid #b2f5ea; }
+        .dot-no { background: #fff5f5; color: #fc8181; border: 1px solid #fed7d7; }
 
         /* 懸浮按鈕 */
-        .fab-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 12px; z-index: 900; }
-        .fab-btn { width: 48px; height: 48px; border-radius: 50%; border: none; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .fab-container { position: fixed; bottom: 30px; right: 20px; display: flex; flex-direction: column; gap: 15px; z-index: 900; }
+        .fab-btn { width: 56px; height: 56px; border-radius: 50%; border: none; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
         .fab-btn:active { transform: scale(0.9); }
-        
-        .fab-download { background: #34c759; }
-        .fab-delete { background: #ff3b30; display: none; } 
+        .fab-download { background: #28a745; }
+        .fab-delete { background: #dc3545; display: none; }
         .fab-reload { background: #007aff; }
 
-        .select-all-btn { position: fixed; bottom: 25px; left: 20px; background: white; color: #333; padding: 8px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; border: 1px solid #ddd; z-index: 900;}
+        .select-all-btn { position: fixed; bottom: 35px; left: 20px; background: white; color: #333; padding: 10px 20px; border-radius: 30px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; border: 1px solid #ddd; z-index: 900; display: none;}
+
+        /* RWD 斷點：768px 以下視為手機 */
+        @media (max-width: 768px) {
+            .desktop-only { display: none !important; }
+            .mobile-only { display: block !important; }
+            .container { padding: 10px; }
+            .select-all-btn { display: block; } /* 手機才顯示全選按鈕 */
+        }
 
         /* Modal */
         .modal { display: none; position: fixed; z-index: 3000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; }
@@ -160,8 +118,8 @@
 
     <div class="info-bar">
         <div>
-            <span class="info-label">本週照片:</span>
-            <span class="info-val" id="week-count">0</span>
+            <span class="info-label">累積照片:</span>
+            <span class="info-val" id="total-count">0</span>
         </div>
         <div>
             <span class="info-label">空間:</span>
@@ -170,30 +128,52 @@
         </div>
     </div>
 
-    <div class="week-nav">
-        <button class="nav-btn" onclick="changeWeek(-7)">❮</button>
-        
-        <div class="date-picker-wrapper">
-            <input type="date" id="date-jumper" class="hidden-date-input" onchange="jumpToDate(this.value)">
-            
-            <div class="date-range">
-                <span id="current-range-text">--/-- - --/--</span>
-                <small id="current-week-num">📅 點此搜尋</small>
-            </div>
+    <div class="desktop-only">
+        <div class="desktop-controls">
+            <input type="month" id="month-picker">
+            <button class="btn-search" onclick="fetchMonthData()">🔍 查詢整月</button>
         </div>
         
-        <button class="nav-btn" onclick="changeWeek(7)">❯</button>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th width="50">選</th>
+                        <th width="120">日期</th>
+                        <th width="150">值班人員</th>
+                        <th>早餐(病)</th>
+                        <th>早餐(護)</th>
+                        <th>午餐(病)</th>
+                        <th>晚餐(病)</th>
+                    </tr>
+                </thead>
+                <tbody id="desktop-tbody"></tbody>
+            </table>
+        </div>
     </div>
 
-    <div id="record-list" class="record-list"></div>
+    <div class="mobile-only">
+        <div class="week-nav">
+            <button class="nav-btn" onclick="changeWeek(-7)">❮</button>
+            <div class="date-picker-wrapper">
+                <input type="date" class="hidden-date-input" onchange="jumpToDate(this.value)">
+                <div class="date-range">
+                    <span id="mobile-range-text">--/-- - --/--</span>
+                    <small id="mobile-week-num">📅 搜尋</small>
+                </div>
+            </div>
+            <button class="nav-btn" onclick="changeWeek(7)">❯</button>
+        </div>
+        <div id="mobile-list"></div>
+        <button class="select-all-btn" onclick="toggleSelectAllMobile()">☑ 全選本週</button>
+    </div>
+
 </div>
 
-<button class="select-all-btn" onclick="toggleSelectAll()">☑ 全選本週</button>
-
 <div class="fab-container">
-    <button class="fab-btn fab-reload" onclick="fetchData()" title="重新整理">↻</button>
-    <button class="fab-btn fab-download" onclick="handleDownloadSelected()" title="下載選取">📥</button>
-    <button id="btn-delete" class="fab-btn fab-delete" onclick="handleDeleteSelected()" title="刪除選取">🗑️</button>
+    <button class="fab-btn fab-reload" onclick="reloadData()" title="重新整理">↻</button>
+    <button class="fab-btn fab-download" onclick="handleDownload()" title="下載選取">📥</button>
+    <button id="btn-delete" class="fab-btn fab-delete" onclick="handleDelete()" title="刪除選取">🗑️</button>
 </div>
 
 <script type="module">
@@ -203,13 +183,16 @@
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
     let supabase = null;
     
-    let currentWeekStart = new Date(); 
+    // 狀態變數
+    let currentMode = 'desktop'; // 'desktop' or 'mobile'
+    let currentWeekStart = new Date(); // 手機版用
+    let currentMonthStr = ''; // 電腦版用 (YYYY-MM)
+    
     let currentRecords = [];
-    let weekDates = []; 
     let isAdmin = false;
     let currentUserEmail = "";
 
-    // 解決時區問題的日期格式化
+    // 解決時區問題
     function getLocalStr(d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -218,7 +201,18 @@
     }
 
     window.onload = function() {
-        initDate(); 
+        // 1. 偵測裝置
+        if (window.innerWidth <= 768) {
+            currentMode = 'mobile';
+            initWeekDate(); // 對齊到本週日
+        } else {
+            currentMode = 'desktop';
+            const now = new Date();
+            currentMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+            document.getElementById('month-picker').value = currentMonthStr;
+        }
+
+        // 2. 初始化 Supabase
         try {
             supabase = createClient(RAW_URL, RAW_KEY);
             initApp();
@@ -227,7 +221,7 @@
         }
     };
 
-    function initDate() {
+    function initWeekDate() {
         const now = new Date();
         const day = now.getDay(); 
         const diff = now.getDate() - day; 
@@ -238,116 +232,85 @@
     async function initApp() {
         const { data } = await supabase.auth.getSession();
         if(!data.session) { window.location.href = 'index.html'; return; }
-        
         currentUserEmail = data.session.user.email;
-        await checkUserRole(); 
-        await fetchData();
+        await checkUserRole();
+        
+        // 根據模式載入不同資料
+        if(currentMode === 'mobile') await fetchWeekData();
+        else await fetchMonthData();
+        
         updateGlobalStats();
     }
 
     async function checkUserRole() {
-        try {
-            const { data } = await supabase.from('user_roles').select('role').eq('email', currentUserEmail).single();
-            isAdmin = (data && data.role === 'admin');
-            const delBtn = document.getElementById('btn-delete');
-            if(isAdmin) delBtn.style.display = 'flex';
-            else delBtn.style.display = 'none';
-        } catch(e) {
-            console.warn("Role check error", e);
-            isAdmin = false;
-        }
+        const { data } = await supabase.from('user_roles').select('role').eq('email', currentUserEmail).single();
+        isAdmin = (data && data.role === 'admin');
+        const delBtn = document.getElementById('btn-delete');
+        if(isAdmin) delBtn.style.display = 'flex';
     }
 
+    // ================= 手機版邏輯 (週) =================
     window.changeWeek = function(days) {
         currentWeekStart.setDate(currentWeekStart.getDate() + days);
-        fetchData();
+        fetchWeekData();
     }
 
-    // 🔥 新增：跳轉指定日期 (點擊日曆後觸發)
     window.jumpToDate = function(val) {
         if(!val) return;
         const target = new Date(val);
         const day = target.getDay(); 
-        const diff = target.getDate() - day; 
-        
-        // 設定為該週的週日
-        currentWeekStart = new Date(target.setDate(diff));
+        currentWeekStart = new Date(target.setDate(target.getDate() - day));
         currentWeekStart.setHours(0,0,0,0);
-        
-        fetchData();
+        fetchWeekData();
     }
 
-    window.fetchData = async function() {
+    async function fetchWeekData() {
         showLoading(true);
         try {
-            const startDate = new Date(currentWeekStart);
-            const endDate = new Date(currentWeekStart);
-            endDate.setDate(startDate.getDate() + 6); 
+            const start = new Date(currentWeekStart);
+            const end = new Date(currentWeekStart);
+            end.setDate(start.getDate() + 6);
 
-            const sStr = getLocalStr(startDate);
-            const eStr = getLocalStr(endDate);
+            const sStr = getLocalStr(start);
+            const eStr = getLocalStr(end);
 
-            document.getElementById('current-range-text').innerText = 
-                `${startDate.getMonth()+1}/${startDate.getDate()} - ${endDate.getMonth()+1}/${endDate.getDate()}`;
-            
-            // 更新年份顯示
-            document.getElementById('current-week-num').innerText = `(${startDate.getFullYear()} 📅)`;
+            document.getElementById('mobile-range-text').innerText = `${start.getMonth()+1}/${start.getDate()} - ${end.getMonth()+1}/${end.getDate()}`;
+            document.getElementById('mobile-week-num').innerText = `(${start.getFullYear()} 📅)`;
 
-            const { data: scheduleData } = await supabase.from('duty_roster')
-                .select('date, staff_name')
-                .gte('date', sStr).lte('date', eStr);
-
-            const { data: recordData } = await supabase.from('meal_records')
-                .select('*')
-                .gte('record_date', sStr).lte('record_date', eStr);
-
-            currentRecords = recordData || [];
-            
-            renderWeek(startDate, scheduleData || [], currentRecords);
-            
-            document.getElementById('week-count').innerText = currentRecords.length;
-
-        } catch(e) {
-            console.error(e);
-            alert("讀取失敗");
-        } finally {
-            showLoading(false);
-        }
+            await loadData(sStr, eStr);
+            renderMobile(start);
+        } catch(e) { alert("讀取失敗"); } 
+        finally { showLoading(false); }
     }
 
-    function renderWeek(startObj, schedules, records) {
-        const container = document.getElementById('record-list');
+    function renderMobile(startObj) {
+        const container = document.getElementById('mobile-list');
         container.innerHTML = '';
-        weekDates = []; 
-        const weekStr = ['日', '一', '二', '三', '四', '五', '六'];
+        const weekStr = ['日','一','二','三','四','五','六'];
 
         for(let i=0; i<7; i++) {
             let d = new Date(startObj);
             d.setDate(d.getDate() + i);
-            
             const dateStr = getLocalStr(d);
-            weekDates.push(dateStr);
-
-            const isWeekend = (i === 0 || i === 6);
-            const dayLabel = `${d.getMonth()+1}/${d.getDate()} (${weekStr[i]})`;
-            const staff = schedules.find(s => s.date === dateStr)?.staff_name || '';
-            const dayRecs = records.filter(r => r.record_date === dateStr);
-
+            
+            // 資料
+            const staff = currentRecords.schedules.find(s=>s.date===dateStr)?.staff_name || '';
+            const dayRecs = currentRecords.records.filter(r=>r.record_date===dateStr);
+            
+            const isWeekend = (i===0 || i===6);
+            
             const card = document.createElement('div');
             card.className = `day-card ${isWeekend ? 'weekend' : ''}`;
-            
             card.innerHTML = `
                 <div class="card-header">
                     <div class="date-title">
                         <input type="checkbox" class="date-checkbox" value="${dateStr}">
-                        ${dayLabel}
+                        ${d.getMonth()+1}/${d.getDate()} (${weekStr[i]})
                     </div>
                     <div class="staff-row">
-                        值班 <input type="text" class="staff-input" value="${staff}" 
-                        onchange="updateStaff('${dateStr}', this.value)">
+                        值班 <input type="text" class="staff-input-mobile" value="${staff}" onchange="updateStaff('${dateStr}', this.value)">
                     </div>
                 </div>
-                
                 <div class="meal-grid">
                     ${renderMealBox(dayRecs, dateStr, 'breakfast', 'patient', '早-病')}
                     ${renderMealBox(dayRecs, dateStr, 'breakfast', 'nursing', '早-護')}
@@ -361,17 +324,70 @@
 
     function renderMealBox(dayRecs, dateStr, meal, target, label) {
         const rec = dayRecs.find(r => r.meal_type === meal && r.target_type === target);
-        const hasPhoto = !!rec;
-        const iconClass = hasPhoto ? 'ok' : 'no';
-        const iconText = hasPhoto ? '✔' : '✖';
-        const action = hasPhoto ? `onclick="window.viewPhoto('${rec.photo_path}', '${dateStr} ${label}')"` : '';
+        const has = !!rec;
+        const cls = has ? 'dot-ok' : 'dot-no';
+        const txt = has ? '✔' : '✖';
+        const act = has ? `onclick="window.viewPhoto('${rec.photo_path}', '${dateStr} ${label}')"` : '';
+        return `<div class="meal-box" ${act}><div class="status-dot ${cls}">${txt}</div><div class="meal-title">${label}</div></div>`;
+    }
 
-        return `
-            <div class="meal-box" ${action}>
-                <div class="status-dot ${iconClass}">${iconText}</div>
-                <div class="meal-title">${label}</div>
-            </div>
-        `;
+    // ================= 電腦版邏輯 (月) =================
+    window.fetchMonthData = async function() {
+        const val = document.getElementById('month-picker').value;
+        if(!val) return;
+        showLoading(true);
+        
+        const [y, m] = val.split('-');
+        const startDate = `${val}-01`;
+        const lastDay = new Date(y, m, 0).getDate();
+        const endDate = `${val}-${lastDay}`;
+
+        await loadData(startDate, endDate);
+        renderDesktop(y, m, lastDay);
+        showLoading(false);
+    }
+
+    function renderDesktop(year, month, daysInMonth) {
+        const tbody = document.getElementById('desktop-tbody');
+        tbody.innerHTML = '';
+        const weekStr = ['日','一','二','三','四','五','六'];
+
+        for(let d=1; d<=daysInMonth; d++) {
+            const dateStr = `${year}-${month}-${String(d).padStart(2,'0')}`;
+            const dateObj = new Date(dateStr);
+            const w = weekStr[dateObj.getDay()];
+            const isWeekend = (dateObj.getDay()===0 || dateObj.getDay()===6);
+
+            const staff = [...new Set(currentRecords.schedules.filter(s=>s.date===dateStr).map(s=>s.staff_name))].join('/');
+            const dayRecs = currentRecords.records.filter(r=>r.record_date===dateStr);
+
+            const getTd = (m, t, lbl) => {
+                const rec = dayRecs.find(r=>r.meal_type===m && r.target_type===t);
+                if(rec) return `<td><span class="status-icon ok" onclick="viewPhoto('${rec.photo_path}','${dateStr} ${lbl}')">✅</span></td>`;
+                else return `<td><span class="status-icon no">❌</span></td>`;
+            };
+
+            const tr = document.createElement('tr');
+            if(isWeekend) tr.className = 'weekend-row';
+            tr.innerHTML = `
+                <td><input type="checkbox" class="date-checkbox" value="${dateStr}"></td>
+                <td>${month}/${d} (${w})</td>
+                <td><input type="text" class="staff-input-desk" value="${staff}" onchange="updateStaff('${dateStr}',this.value)"></td>
+                ${getTd('breakfast','patient','早-病')}
+                ${getTd('breakfast','nursing','早-護')}
+                ${getTd('lunch','patient','午-病')}
+                ${getTd('dinner','patient','晚-病')}
+            `;
+            tbody.appendChild(tr);
+        }
+    }
+
+    // ================= 共用核心 =================
+    async function loadData(start, end) {
+        const { data: sData } = await supabase.from('duty_roster').select('date, staff_name').gte('date', start).lte('date', end);
+        const { data: rData } = await supabase.from('meal_records').select('*').gte('record_date', start).lte('record_date', end);
+        currentRecords = { schedules: sData||[], records: rData||[] };
+        document.getElementById('total-count').innerText = (rData||[]).length + " (本區間)";
     }
 
     async function updateGlobalStats() {
@@ -379,7 +395,6 @@
         const total = count || 0;
         const usedMB = (total * 0.5).toFixed(1);
         document.getElementById('storage-usage').innerText = `${usedMB} MB`;
-        
         const left = Math.floor((500 - total*0.5)/3);
         const alertEl = document.getElementById('storage-days');
         alertEl.innerText = `(剩約 ${left} 天)`;
@@ -396,70 +411,57 @@
         }
     }
 
-    let isAllSelected = false;
-    window.toggleSelectAll = function() {
-        const checkboxes = document.querySelectorAll('.date-checkbox');
-        isAllSelected = !isAllSelected;
-        checkboxes.forEach(cb => cb.checked = isAllSelected);
-        const btn = document.querySelector('.select-all-btn');
-        btn.innerText = isAllSelected ? "☒ 取消全選" : "☑ 全選本週";
+    window.reloadData = function() {
+        if(currentMode==='mobile') fetchWeekData();
+        else fetchMonthData();
     }
 
-    window.handleDownloadSelected = async function() {
-        const checkboxes = document.querySelectorAll('.date-checkbox:checked');
-        if (checkboxes.length === 0) return alert("請先勾選日期");
-
-        const selectedDates = Array.from(checkboxes).map(cb => cb.value);
-        const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
-
-        if(targetRecords.length === 0) return alert("選取的日期沒有照片");
-
+    window.handleDownload = async function() {
+        const cbs = document.querySelectorAll('.date-checkbox:checked');
+        if(cbs.length===0) return alert("請勾選日期");
         showLoading(true);
         const zip = new JSZip();
+        const dates = Array.from(cbs).map(c=>c.value);
+        const targets = currentRecords.records.filter(r=>dates.includes(r.record_date));
         
-        await Promise.all(targetRecords.map(async r => {
+        if(targets.length===0) { showLoading(false); return alert("選取的日期無照片"); }
+
+        await Promise.all(targets.map(async r => {
             const { data } = await supabase.storage.from('private_photos').download(r.photo_path);
-            if(data) {
-                const fname = `${r.record_date}_${translate(r.meal_type)}_${translate(r.target_type)}.jpg`;
-                zip.file(fname, data);
-            }
+            if(data) zip.file(`${r.record_date}_${r.meal_type}_${r.target_type}.jpg`, data);
         }));
         
         const content = await zip.generateAsync({type:"blob"});
-        saveAs(content, `照片備份_${selectedDates[0]}.zip`);
+        saveAs(content, `照片備份_${dates[0]}.zip`);
         showLoading(false);
     }
 
-    window.handleDeleteSelected = async function() {
-        if (!isAdmin) return alert("權限不足：僅管理員可刪除");
-        const checkboxes = document.querySelectorAll('.date-checkbox:checked');
-        if (checkboxes.length === 0) return alert("請先勾選日期");
-
-        if(!confirm(`⚠️ 確定要刪除選取日期的 ${checkboxes.length} 天資料嗎？\n照片將無法復原！`)) return;
+    window.handleDelete = async function() {
+        if(!isAdmin) return alert("權限不足");
+        const cbs = document.querySelectorAll('.date-checkbox:checked');
+        if(cbs.length===0) return alert("請勾選日期");
+        if(!confirm(`確定刪除 ${cbs.length} 天的資料嗎？`)) return;
 
         showLoading(true);
-        try {
-            const selectedDates = Array.from(checkboxes).map(cb => cb.value);
-            const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
+        const dates = Array.from(cbs).map(c=>c.value);
+        const targets = currentRecords.records.filter(r=>dates.includes(r.record_date));
+        const paths = targets.map(r=>r.photo_path);
+        const ids = targets.map(r=>r.id);
 
-            const paths = targetRecords.map(r => r.photo_path);
-            if (paths.length > 0) {
-                await supabase.storage.from('private_photos').remove(paths);
-            }
-            const ids = targetRecords.map(r => r.id);
-            if (ids.length > 0) {
-                await supabase.from('meal_records').delete().in('id', ids);
-            }
+        if(paths.length>0) await supabase.storage.from('private_photos').remove(paths);
+        if(ids.length>0) await supabase.from('meal_records').delete().in('id', ids);
 
-            alert("刪除成功");
-            fetchData(); 
-            updateGlobalStats(); 
+        alert("刪除成功");
+        reloadData();
+        updateGlobalStats();
+        showLoading(false);
+    }
 
-        } catch(e) {
-            alert("刪除失敗: " + e.message);
-        } finally {
-            showLoading(false);
-        }
+    let isAllMobile = false;
+    window.toggleSelectAllMobile = function() {
+        isAllMobile = !isAllMobile;
+        document.querySelectorAll('.mobile-only .date-checkbox').forEach(c=>c.checked=isAllMobile);
+        document.querySelector('.select-all-btn').innerText = isAllMobile ? "☒ 取消" : "☑ 全選本週";
     }
 
     window.viewPhoto = async function(path, cap) {
@@ -472,9 +474,6 @@
     }
 
     function showLoading(s) { document.getElementById('loading-overlay').style.display = s ? 'flex' : 'none'; }
-    function translate(e) { const m={'breakfast':'早','lunch':'午','dinner':'晚','patient':'病','nursing':'護'}; return m[e]||e; }
-    
-    window.viewPhoto = viewPhoto;
 </script>
 </body>
 </html>
