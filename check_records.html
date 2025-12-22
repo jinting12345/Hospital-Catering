@@ -13,49 +13,40 @@
         body { font-family: "Microsoft JhengHei", sans-serif; background: #f8f9fa; margin: 0; padding: 20px; color: #333; }
         .container { max-width: 1200px; margin: 0 auto; }
         
-        /* 頂部資訊卡 */
         .info-card { background: linear-gradient(135deg, #1e88e5, #1565c0); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .info-item h3 { margin: 0 0 5px 0; font-size: 0.9em; opacity: 0.9; }
         .info-number { font-size: 1.8em; font-weight: bold; display: block; }
         .info-sub { font-size: 0.8em; color: #ffeb3b; margin-top: 5px; font-weight: normal; }
 
-        /* 控制列 */
         .controls { background: white; padding: 15px; border-radius: 8px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         select, input[type="month"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; }
         .btn { border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; color: white; }
         .btn-search { background-color: #1e88e5; }
         .btn-search:hover { background-color: #1565c0; }
         
-        /* 下載按鈕 (綠色) */
         .btn-download { background-color: #27ae60; margin-left: auto; }
         .btn-download:hover { background-color: #219150; }
 
-        /* 刪除按鈕 (紅色) - 預設隱藏，只有管理員可見 */
         .btn-delete { background-color: #e74c3c; display: none; } 
         .btn-delete:hover { background-color: #c0392b; }
 
-        /* 只有管理員才顯示的樣式 */
         .admin-visible { display: inline-block !important; }
 
         .btn-back { background-color: #7f8c8d; text-decoration: none; display: inline-block; padding: 8px 16px; border-radius: 4px; color: white; font-weight: bold; font-size: 14px;}
 
-        /* 表格樣式 */
         .table-container { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px; text-align: center; border-bottom: 1px solid #eee; }
         th { background: #f8f9fa; color: #555; font-weight: bold; }
         tr:hover { background-color: #f1f2f6; }
         
-        /* 狀態圖示 */
         .status-ok { color: #27ae60; font-size: 1.4em; cursor: pointer; transition: transform 0.2s; display: inline-block; }
         .status-ok:hover { transform: scale(1.2); text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .status-no { color: #ffadad; font-size: 1.2em; cursor: default; } 
         
-        /* 週末與日期樣式 */
         .weekend { background-color: #fff3cd; } 
         .date-cell { color: #1e88e5; font-weight: bold; font-size: 1.05em; }
 
-        /* 人員輸入框 */
         .staff-input {
             border: 1px solid transparent; 
             background: transparent;
@@ -71,17 +62,15 @@
         .staff-input:hover { border: 1px solid #ccc; background: white; } 
         .staff-input:focus { border: 1px solid #1e88e5; background: white; outline: none; box-shadow: 0 0 0 2px rgba(30,136,229,0.2); }
 
-        /* 讀取遮罩 */
-        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; }
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; text-align: center;}
+        #loading-subtext { font-size: 0.6em; color: #666; margin-top: 10px; font-weight: normal; }
 
-        /* 圖片預覽 Modal */
         .modal { display: none; position: fixed; z-index: 1000; padding-top: 50px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.85); }
         .modal-content { margin: auto; display: block; max-width: 90%; max-height: 85vh; border-radius: 8px; box-shadow: 0 4px 15px rgba(255,255,255,0.1); }
         .close-modal { position: absolute; top: 20px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; transition: 0.3s; cursor: pointer; }
         .close-modal:hover { color: #bbb; text-decoration: none; cursor: pointer; }
         .modal-caption { margin: auto; display: block; width: 80%; text-align: center; color: #ccc; padding: 10px 0; height: 150px; font-size: 1.2em; }
 
-        /* Toast */
         #toast {
             visibility: hidden;
             min-width: 250px;
@@ -109,6 +98,7 @@
 
 <div id="loading-overlay">
     <div id="loading-text">資料讀取中...</div>
+    <div id="loading-subtext">若超過 10 秒未回應，請重新整理</div>
 </div>
 
 <div id="toast">✅ 資料已自動儲存</div>
@@ -167,14 +157,32 @@
 </div>
 
 <script>
+    // 1. 全域錯誤捕捉 (如果有程式語法錯誤，會直接彈窗)
+    window.onerror = function(message, source, lineno, colno, error) {
+        showLoading(false);
+        alert("❌ 程式發生錯誤：\n" + message + "\n(行數: " + lineno + ")");
+        return false;
+    };
+
     const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
+    
     function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+    
+    // 2. 檢查 Supabase 是否載入成功
+    if (typeof window.supabase === 'undefined') {
+        alert("⛔ 嚴重錯誤：Supabase 函式庫未載入！\n可能被防火牆或擋廣告軟體攔截。\n請檢查網路連線。");
+        document.querySelector('.container').style.opacity = '0.3';
+        document.querySelector('.container').style.pointerEvents = 'none';
+        throw new Error("Supabase Library Missing");
+    }
+
     const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
     
     let currentRecords = []; 
-    let isAdmin = false; // 🔥 全域變數，紀錄是否為管理員
+    let isAdmin = false; 
     let currentUserEmail = "";
+    let loadingTimer = null; // 用來計時的變數
 
     const weekDays = ['(日)', '(一)', '(二)', '(三)', '(四)', '(五)', '(六)'];
 
@@ -183,60 +191,87 @@
         const yyyy = now.getFullYear();
         const mm = String(now.getMonth() + 1).padStart(2, '0');
         document.getElementById('month-picker').value = `${yyyy}-${mm}`;
-        checkSession();
+        
+        // 加上 try-catch 防止初始化失敗卡死
+        try {
+            checkSession();
+        } catch(e) {
+            showLoading(false);
+            alert("初始化失敗：" + e.message);
+        }
     };
 
     async function checkSession() {
-        const { data } = await supabase.auth.getSession();
-        if(!data.session) { alert("請先登入"); window.location.href = 'index.html'; return; } 
+        showLoading(true, "驗證身分中...");
         
-        currentUserEmail = data.session.user.email;
-        
-        // 🔥 檢查使用者權限
-        await checkUserRole();
+        try {
+            const { data, error } = await supabase.auth.getSession();
+            if (error) throw error;
+            
+            if(!data.session) { 
+                showLoading(false);
+                alert("⚠️ 您尚未登入，請返回首頁登入。"); 
+                window.location.href = 'index.html'; 
+                return; 
+            } 
+            
+            currentUserEmail = data.session.user.email;
+            await checkUserRole();
+            fetchData(); 
+            updateGlobalStats(); 
 
-        fetchData(); 
-        updateGlobalStats(); 
+        } catch(e) {
+            showLoading(false);
+            alert("❌ 身分驗證失敗：" + e.message + "\n請嘗試重新登入。");
+        }
     }
 
-    // 🔥 檢查是否為管理員
     async function checkUserRole() {
         try {
-            const { data } = await supabase.from('user_roles').select('role').eq('email', currentUserEmail).single();
-            // 如果 user_roles 沒資料，data 會是 null，不報錯，isAdmin 預設 false
+            const { data, error } = await supabase.from('user_roles').select('role').eq('email', currentUserEmail).single();
+            // 這裡錯誤不擋流程，只記錄
+            if(error && error.code !== 'PGRST116') console.warn("Role check error:", error);
+
             isAdmin = (data && data.role === 'admin');
             
             if (isAdmin) {
-                // 如果是管理員，顯示刪除按鈕
                 document.getElementById('btn-delete').style.display = 'inline-block';
             } else {
-                // 如果是員工，確保刪除按鈕隱藏
                 document.getElementById('btn-delete').style.display = 'none';
             }
         } catch(e) {
-            console.warn("User role check failed or no role found:", e);
+            console.warn("User role check failed:", e);
             isAdmin = false;
         }
     }
 
     async function fetchData() {
         showLoading(true, "讀取班表與照片紀錄...");
-        const monthVal = document.getElementById('month-picker').value; 
-        const [year, month] = monthVal.split('-');
+        
+        try {
+            const monthVal = document.getElementById('month-picker').value; 
+            const [year, month] = monthVal.split('-');
 
-        const startDate = `${year}-${month}-01`;
-        const lastDay = new Date(year, month, 0).getDate(); 
-        const endDate = `${year}-${month}-${lastDay}`;
+            const startDate = `${year}-${month}-01`;
+            const lastDay = new Date(year, month, 0).getDate(); 
+            const endDate = `${year}-${month}-${lastDay}`;
 
-        const { data: scheduleData, error: scheError } = await supabase.from('duty_roster').select('date, staff_name').gte('date', startDate).lte('date', endDate);
-        if (scheError) { console.error(scheError); alert("讀取班表失敗: " + scheError.message); showLoading(false); return; }
+            // 1. 抓班表
+            const { data: scheduleData, error: scheError } = await supabase.from('duty_roster').select('date, staff_name').gte('date', startDate).lte('date', endDate);
+            if (scheError) throw new Error("班表讀取失敗: " + scheError.message);
 
-        const { data: recordData, error: recError } = await supabase.from('meal_records').select('*').gte('record_date', startDate).lte('record_date', endDate);
-        if (recError) { console.error(recError); alert("讀取紀錄失敗: " + recError.message); showLoading(false); return; }
+            // 2. 抓紀錄
+            const { data: recordData, error: recError } = await supabase.from('meal_records').select('*').gte('record_date', startDate).lte('record_date', endDate);
+            if (recError) throw new Error("照片紀錄讀取失敗: " + recError.message);
 
-        currentRecords = recordData; 
-        renderTable(year, month, scheduleData, recordData);
-        showLoading(false);
+            currentRecords = recordData; 
+            renderTable(year, month, scheduleData, recordData);
+        
+        } catch (err) {
+            alert("❌ 資料讀取錯誤：\n" + err.message);
+        } finally {
+            showLoading(false); // 無論成功失敗，都要關掉遮罩
+        }
     }
 
     function renderTable(year, month, schedules, records) {
@@ -284,42 +319,47 @@
     }
 
     async function updateGlobalStats() {
-        const { count, error } = await supabase
-            .from('meal_records')
-            .select('*', { count: 'exact', head: true });
+        // 這裡不放 showLoading，因為是背景執行
+        try {
+            const { count, error } = await supabase
+                .from('meal_records')
+                .select('*', { count: 'exact', head: true });
 
-        if (error) {
-            console.error("統計讀取失敗:", error);
-            document.getElementById('total-photos').innerText = "讀取失敗";
-            return;
-        }
+            if (error) {
+                document.getElementById('total-photos').innerText = "讀取失敗";
+                return;
+            }
 
-        const totalCount = count || 0;
-        const usedSpace = (totalCount * 0.5); 
-        const totalSpace = 500; 
-        
-        document.getElementById('total-photos').innerText = totalCount + " 張"; 
-        document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
-        
-        const dailyUsage = 3; 
-        const remainingSpace = totalSpace - usedSpace;
-        const daysLeft = Math.floor(remainingSpace / dailyUsage);
+            const totalCount = count || 0;
+            const usedSpace = (totalCount * 0.5); 
+            const totalSpace = 500; 
+            
+            document.getElementById('total-photos').innerText = totalCount + " 張"; 
+            document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
+            
+            const dailyUsage = 3; 
+            const remainingSpace = totalSpace - usedSpace;
+            const daysLeft = Math.floor(remainingSpace / dailyUsage);
 
-        const daysLabel = document.getElementById('storage-days');
-        if (daysLeft > 100) {
-            daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#ffeb3b"; 
-        } else if (daysLeft > 30) {
-            daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#fff"; 
-        } else {
-            daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
-            daysLabel.style.color = "#ff8a80"; 
+            const daysLabel = document.getElementById('storage-days');
+            if (daysLeft > 100) {
+                daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
+                daysLabel.style.color = "#ffeb3b"; 
+            } else if (daysLeft > 30) {
+                daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
+                daysLabel.style.color = "#fff"; 
+            } else {
+                daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
+                daysLabel.style.color = "#ff8a80"; 
+            }
+        } catch(e) {
+            console.error("Stats error", e);
         }
     }
 
     async function updateStaff(date, newName) {
         newName = newName.trim();
+        // 這裡不 Show loading，體驗比較好
         try {
             const { data: existing, error: findError } = await supabase.from('duty_roster').select('*').eq('date', date);
             if(findError) throw findError;
@@ -352,7 +392,11 @@
             modal.style.display = "block";
             modalImg.src = data.signedUrl;
             caption.innerText = captionText;
-        } catch (err) { alert("無法載入照片: " + err.message); } finally { showLoading(false); }
+        } catch (err) { 
+            alert("無法載入照片: " + err.message); 
+        } finally { 
+            showLoading(false); 
+        }
     }
     function closeImageModal() { document.getElementById('imageModal').style.display = "none"; }
 
@@ -385,7 +429,6 @@
     }
 
     async function handleDeleteOnly() {
-        // 🔥 雙重防呆：如果不是管理員，直接拒絕
         if (!isAdmin) {
             alert("❌ 權限不足：只有管理員可以刪除資料。");
             return;
@@ -435,7 +478,31 @@
     }
 
     function toggleAll(source) { document.querySelectorAll('.date-checkbox').forEach(cb => cb.checked = source.checked); }
-    function showLoading(show, text) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; if(text) document.getElementById('loading-text').innerText = text; }
+    
+    // 🔥 改良後的 showLoading：加入逾時偵測
+    function showLoading(show, text) { 
+        const overlay = document.getElementById('loading-overlay');
+        const textEl = document.getElementById('loading-text');
+
+        if (show) {
+            overlay.style.display = 'flex'; 
+            if(text) textEl.innerText = text;
+            
+            // 清除舊的計時器
+            if(loadingTimer) clearTimeout(loadingTimer);
+
+            // 設定 10 秒後如果還沒關掉，就報錯
+            loadingTimer = setTimeout(() => {
+                overlay.style.display = 'none';
+                alert("⚠️ 系統回應逾時 (超過 10 秒)！\n\n可能原因：\n1. 網路連線不穩\n2. 資料庫暫時休眠中\n3. 防火牆阻擋\n\n請重新整理網頁再試。");
+            }, 10000); // 10000 毫秒 = 10 秒
+
+        } else {
+            overlay.style.display = 'none'; 
+            // 成功載完就取消計時
+            if(loadingTimer) clearTimeout(loadingTimer);
+        }
+    }
     
     function translate(eng) { 
         const map = { 'breakfast': '早餐', 'lunch': '午餐', 'dinner': '晚餐', 'patient': '病患', 'nursing': '護家', 'care': '護家' }; 
