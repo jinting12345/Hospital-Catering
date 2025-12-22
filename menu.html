@@ -65,14 +65,6 @@
             </a>
         </div>
 
-        <div class="group-title">🎓 教研組</div>
-        <div class="grid">
-            <a href="ocr.html" class="card">
-                <span class="icon">🧠</span>
-                <span>OCR 辨識 (測試)</span>
-            </a>
-        </div>
-
         <div class="group-title">⚙️ 共用區</div>
         <div class="grid">
             <a href="upload_schedule.html" class="card">
@@ -115,7 +107,7 @@
                 document.getElementById('logoutBtn').onclick = function() {
                     window.location.href = 'index.html';
                 };
-                alert("⚠️ 系統部分功能被阻擋，可能影響操作。\n(登出功能已強制啟用)");
+                console.warn("系統受阻，啟用強制登出模式");
             }
         }
 
