@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>義大醫院長照合約生成系統</title>
     
-    <!-- 引入 Supabase 官方 SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+        window.createClient = createClient; // 掛載到全域
+    </script>
     
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.min.js"></script>
     <script src="https://unpkg.com/docxtemplater@3.37.11/build/docxtemplater.js"></script>
@@ -17,49 +19,15 @@
         body { font-family: "Microsoft JhengHei", sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f5f7fa; color: #333; }
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
         
-        /* --- 頂部導航列樣式 --- */
-        .top-nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .back-link {
-            text-decoration: none;
-            color: #666;
-            font-weight: bold;
-            font-size: 1.1em;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-        .back-link:hover {
-            color: #333;
-        }
-
-        .logout-btn {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 4px;
-            font-size: 1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .logout-btn:hover {
-            background-color: #c82333;
-        }
-        /* ----------------------- */
-
+        /* 頂部導航 */
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .back-link { text-decoration: none; color: #666; font-weight: bold; font-size: 1.1em; display: flex; align-items: center; gap: 5px; cursor: pointer; transition: color 0.2s; }
+        .back-link:hover { color: #333; }
+        .logout-btn { background-color: #dc3545; color: white; border: none; padding: 8px 20px; border-radius: 4px; font-size: 1em; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        
         .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #edf2f7; padding-bottom: 20px; }
         .header h1 { color: #2c3e50; margin: 0; font-size: 2em; }
-        .header p { color: #7f8c8d; margin-top: 10px; }
-
+        
         .step-section { margin-bottom: 30px; }
         .step-header { display: flex; align-items: center; margin-bottom: 15px; }
         .step-number { background: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; }
@@ -76,38 +44,29 @@
 
         .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; color: white; margin-top: 15px; }
         .btn-parse { background-color: #3498db; }
-        .btn-parse:hover { background-color: #2980b9; }
         .btn-generate { background-color: #27ae60; }
-        .btn-generate:hover { background-color: #219150; }
         .btn:disabled { background-color: #a0aec0; cursor: not-allowed; }
 
         input[type="file"] { margin-bottom: 10px; }
 
-        .alert-box { 
-            background: #fff3cd; 
-            border-left: 4px solid #ffc107; 
-            padding: 15px; 
-            margin: 20px 0; 
-            border-radius: 6px; 
-        }
-        .alert-box strong { color: #856404; }
-        .alert-box p { margin: 8px 0; color: #856404; font-size: 0.95em; }
+        .alert-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 6px; }
+        
+        /* 登入視窗 */
+        #login-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .login-box { background: white; padding: 30px; border-radius: 10px; width: 300px; text-align: center; }
 
-        /* 登入視窗樣式 */
-        #login-modal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 9999;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .login-box {
-            background: white; padding: 30px; border-radius: 10px; width: 300px;
-            text-align: center;
-        }
+        /* 讀取遮罩 */
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 10000; flex-direction: column; }
+        #loading-text { font-size: 1.5em; color: #3498db; font-weight: bold; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-<!-- 登入視窗 -->
+<div id="loading-overlay">
+    <div id="loading-text">處理中...</div>
+    <div style="color:#666">請稍候</div>
+</div>
+
 <div id="login-modal">
     <div class="login-box">
         <h2>系統登入</h2>
@@ -122,13 +81,8 @@
 </div>
 
 <div class="container">
-    
-    <!-- 頂部導航列 -->
     <div class="top-nav">
-        <!-- 修改處：將 href 指向 menu.html -->
-        <a href="menu.html" class="back-link">
-            <span>⬅</span> 回選單
-        </a>
+        <a href="menu.html" class="back-link"><span>⬅</span> 回選單</a>
         <button onclick="handleLogout()" class="logout-btn">登出</button>
     </div>
 
@@ -223,35 +177,70 @@
 </div>
 
 <script>
-    // ============================================
-    // 1. 初始化 Supabase
+    // 全域錯誤處理
+    window.onerror = function(msg) {
+        showLoading(false);
+        alert("⚠️ 系統錯誤: " + msg);
+        return false;
+    };
+
     const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co'; 
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII'; 
     const SUPABASE_KEY = RAW_KEY.trim(); 
 
     let supabase = null;
-    try {
-        if (SUPABASE_KEY.length > 10) {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 初始化：等待 module 載入
+    window.onload = function() {
+        showLoading(true, "系統初始化中...");
+        
+        setTimeout(() => {
+            try {
+                if (window.createClient) {
+                    supabase = window.createClient(SUPABASE_URL, SUPABASE_KEY);
+                    checkSession();
+                } else {
+                    throw new Error("Supabase 元件載入失敗");
+                }
+            } catch (e) {
+                showLoading(false);
+                alert("⚠️ 初始化失敗：" + e.message + "\n請檢查瀏覽器設定。");
+            }
+
+            // 初始化日期
+            const today = new Date();
+            const rocYear = today.getFullYear() - 1911;
+            document.getElementById('visit_date').value = `${rocYear}年${today.getMonth() + 1}月${today.getDate()}日`;
+            document.getElementById('end_date').value = `${rocYear+1}年${today.getMonth() + 1}月${today.getDate()}日`;
+            
+            showLoading(false);
+        }, 500);
+        
+        // 設定 PDF Worker
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
         }
-    } catch (e) {
-        console.error("Supabase 初始化失敗，請檢查 Key 格式", e);
+    };
+
+    function showLoading(show, text) {
+        const el = document.getElementById('loading-overlay');
+        const txt = document.getElementById('loading-text');
+        el.style.display = show ? 'flex' : 'none';
+        if(text) txt.innerText = text;
     }
 
     // ============================================
-    // 2. 登入與登出邏輯
+    // Auth 邏輯
     // ============================================
     async function handleLogin() {
-        if (!supabase) { alert("Supabase Key 設定錯誤，請檢查程式碼"); return; }
+        if (!supabase) return;
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
         const msg = document.getElementById('login-msg');
 
-        if(!email || !password) {
-            msg.innerText = "請輸入帳號密碼";
-            return;
-        }
-        msg.innerText = "登入中...";
+        if(!email || !password) { msg.innerText = "請輸入帳號密碼"; return; }
+        
+        msg.innerText = "驗證中...";
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
@@ -262,16 +251,11 @@
         }
     }
 
-    // 登出功能
     async function handleLogout() {
         if (!supabase) return;
         if(confirm("確定要登出嗎？")) {
-            const { error } = await supabase.auth.signOut();
-            if (!error) {
-                location.reload(); 
-            } else {
-                alert("登出失敗: " + error.message);
-            }
+            await supabase.auth.signOut();
+            location.reload(); 
         }
     }
 
@@ -281,45 +265,24 @@
         if (data.session) {
             document.getElementById('login-modal').style.display = 'none';
             document.getElementById('user-status').innerText = `目前使用者: ${data.session.user.email}`;
+        } else {
+            document.getElementById('login-modal').style.display = 'flex';
         }
     }
-    
+
     // ============================================
-    // 3. Supabase 下載
+    // 功能邏輯
     // ============================================
     async function downloadTemplateFromSupabase() {
         const bucketId = 'system_files'; 
         const filePath = 'templates/template.docx';
 
-        const { data, error } = await supabase
-          .storage
-          .from(bucketId)
-          .download(filePath);
-
+        const { data, error } = await supabase.storage.from(bucketId).download(filePath);
         if (error) {
-            console.error('Supabase 下載錯誤:', error);
-            if (error.statusCode === '403' || error.error === 'Unauthorized') {
-                 throw new Error("權限驗證失敗：請確認已登入且 Bucket 設定為 Authenticated");
-            }
-            throw new Error(error.message);
+            throw new Error("範本下載失敗: " + error.message);
         }
         return await data.arrayBuffer();
     }
-
-    // ============================================
-    // 4. PDF 解析邏輯
-    // ============================================
-    if (window.pdfjsLib) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
-    }
-
-    window.onload = function() {
-        checkSession();
-        const today = new Date();
-        const rocYear = today.getFullYear() - 1911;
-        document.getElementById('visit_date').value = `${rocYear}年${today.getMonth() + 1}月${today.getDate()}日`;
-        document.getElementById('end_date').value = `${rocYear+1}年${today.getMonth() + 1}月${today.getDate()}日`;
-    };
 
     function cleanTextDeep(text) {
         return text.replace(/※/g, "")
@@ -339,15 +302,12 @@
     }
 
     async function parsePDF() {
-        if (typeof pdfjsLib === 'undefined') { alert("PDF 元件載入中..."); return; }
+        if (typeof pdfjsLib === 'undefined') { alert("PDF 元件尚未載入"); return; }
         const fileInput = document.getElementById('pdf_upload');
-        const btn = document.querySelector('.btn-parse');
-        
         if (fileInput.files.length === 0) { alert("請先選擇 PDF 檔案!"); return; }
 
-        btn.innerText = "⏳ 解析中...";
-        btn.disabled = true;
-
+        showLoading(true, "正在解析 PDF...");
+        
         try {
             const file = fileInput.files[0];
             const arrayBuffer = await file.arrayBuffer();
@@ -362,19 +322,25 @@
             
             const cleanText = cleanTextDeep(fullText);
 
-            let userName = "", userId = "", userPhone = "", paymentVal = "240";
+            // 解析姓名/身分證
+            let userName = "", userId = "";
             const headerMatch = cleanText.match(/姓名\/身分證字號[:：]?([^\/]+)\/([A-Z][0-9]{9})/);
             if (headerMatch) { userName = headerMatch[1].replace(/[:：]/g, ""); userId = headerMatch[2]; }
             
+            // 解析電話
+            let userPhone = "";
             const phoneMatch = cleanText.match(/個案電話.*?((09\d{8})|(0\d{1,2}-?\d{6,8}))/);
             if (phoneMatch) userPhone = phoneMatch[1];
             
+            // 解析福利別
+            let paymentVal = "240";
             const welfareMatch = cleanText.match(/長照福利.*?(第[一二三]類)/);
             if (welfareMatch) {
                 if (welfareMatch[1].includes("一")) paymentVal = "0";
                 else if (welfareMatch[1].includes("二")) paymentVal = "75";
             }
 
+            // 解析簽約人
             let contractorName = userName;
             let contractorPhone = userPhone;
             let agentMatch = cleanText.match(/代理人姓名(.*?)代理人身分證/);
@@ -386,6 +352,7 @@
             const agentPhoneMatch = cleanText.match(/(?:代理人|聯絡人)手機[::]?.*?((09\d{8}))/);
             if (agentPhoneMatch) contractorPhone = agentPhoneMatch[1];
 
+            // 解析地址
             let hAddr = "", cAddr = "";
             const idxHouse = cleanText.indexOf("戶籍地址");
             if (idxHouse !== -1) {
@@ -404,19 +371,9 @@
                 if (foundAddr && foundAddr !== hAddr) cAddr = foundAddr;
             }
             
-            if (!hAddr || !cAddr) {
-                const allAddrRegex = /([台臺]?[^0-9\s]{2,3}[縣市].*?[號樓])/g;
-                const matches = [];
-                let m;
-                while ((m = allAddrRegex.exec(cleanText)) !== null) {
-                    let a = m[1].replace(/^[^台臺高新北桃中南基宜花東澎金連苗彰雲嘉屏]*/, "");
-                    if (!a.includes("中心") && !a.includes("醫院") && !a.includes("衛生局") && a.length > 8) matches.push(a);
-                }
-                if (!hAddr && matches.length > 0) hAddr = matches[0];
-                if (!cAddr && matches.length > 1) cAddr = matches[1];
-            }
             if (!cAddr) cAddr = hAddr;
 
+            // 填入表單
             document.getElementById('user_name').value = userName;
             document.getElementById('user_id').value = userId;
             document.getElementById('user_phone').value = userPhone;
@@ -426,17 +383,13 @@
             document.getElementById('household_address').value = hAddr;
             document.getElementById('contact_address').value = cAddr;
 
+            showLoading(false);
         } catch (err) {
+            showLoading(false);
             alert("解析發生錯誤: " + err.message);
-        } finally {
-            btn.innerText = "🔍 解析資料";
-            btn.disabled = false;
         }
     }
 
-    // ============================================
-    // 5. Word 生成邏輯
-    // ============================================
     function switchTemplateMode() {
         const mode = document.querySelector('input[name="template_mode"]:checked').value;
         document.getElementById('auto_mode_box').style.display = mode === 'auto' ? 'block' : 'none';
@@ -444,38 +397,35 @@
     }
 
     async function generateWordAuto() {
-        const btn = document.querySelector('#auto_mode_box .btn-generate');
-        btn.innerText = "⏳ 下載範本中...";
-        btn.disabled = true;
-
+        showLoading(true, "下載範本中...");
         try {
             const arrayBuffer = await downloadTemplateFromSupabase();
-            btn.innerText = "⏳ 生成中...";
+            showLoading(true, "生成合約中...");
             await generateWordFromBuffer(arrayBuffer);
+            showLoading(false);
         } catch (error) {
-            console.error(error);
+            showLoading(false);
             alert("自動模式失敗: " + error.message);
-        } finally {
-            btn.innerText = "📄 下載合約 (自動模式)";
-            btn.disabled = false;
         }
     }
 
     async function generateWordManual() {
         const templateInput = document.getElementById('template_upload');
-        const btn = document.querySelector('#manual_mode_box .btn-generate');
         if (templateInput.files.length === 0) { alert("請選擇 Word 檔案"); return; }
         
-        btn.innerText = "⏳ 處理中...";
+        showLoading(true, "處理中...");
         try {
             const arrayBuffer = await templateInput.files[0].arrayBuffer();
             await generateWordFromBuffer(arrayBuffer);
-        } catch(e) { alert("錯誤: " + e.message); } 
-        finally { btn.innerText = "📄 下載合約 (手動模式)"; }
+            showLoading(false);
+        } catch(e) { 
+            showLoading(false);
+            alert("錯誤: " + e.message); 
+        } 
     }
 
     async function generateWordFromBuffer(arrayBuffer) {
-        if (typeof PizZip === 'undefined') { alert("系統載入中..."); return; }
+        if (typeof PizZip === 'undefined') { throw new Error("Docx 模組未載入"); }
         const zip = new PizZip(arrayBuffer);
         const doc = new window.docxtemplater(zip, { 
             paragraphLoop: true, 
@@ -506,7 +456,6 @@
         });
 
         saveAs(blob, `義大醫院契約書_${templateData.user_name}.docx`);
-        alert("✅ 合約生成成功!");
     }
 </script>
 
