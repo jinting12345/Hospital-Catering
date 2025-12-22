@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>查看照片上傳紀錄 & 管理</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
@@ -30,8 +29,6 @@
         .btn-delete { background-color: #e74c3c; display: none; } 
         .btn-delete:hover { background-color: #c0392b; }
 
-        .admin-visible { display: inline-block !important; }
-
         .btn-back { background-color: #7f8c8d; text-decoration: none; display: inline-block; padding: 8px 16px; border-radius: 4px; color: white; font-weight: bold; font-size: 14px;}
 
         .table-container { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -47,22 +44,11 @@
         .weekend { background-color: #fff3cd; } 
         .date-cell { color: #1e88e5; font-weight: bold; font-size: 1.05em; }
 
-        .staff-input {
-            border: 1px solid transparent; 
-            background: transparent;
-            text-align: center;
-            width: 100%;
-            font-size: 1.05em;
-            color: #2c3e50;
-            font-weight: bold;
-            padding: 5px;
-            border-radius: 4px;
-            transition: 0.2s;
-        }
+        .staff-input { border: 1px solid transparent; background: transparent; text-align: center; width: 100%; font-size: 1.05em; color: #2c3e50; font-weight: bold; padding: 5px; border-radius: 4px; transition: 0.2s; }
         .staff-input:hover { border: 1px solid #ccc; background: white; } 
         .staff-input:focus { border: 1px solid #1e88e5; background: white; outline: none; box-shadow: 0 0 0 2px rgba(30,136,229,0.2); }
 
-        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; text-align: center;}
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); display: flex; justify-content: center; align-items: center; z-index: 999; font-size: 1.5em; color: #1e88e5; font-weight: bold; flex-direction: column; text-align: center;}
         #loading-subtext { font-size: 0.6em; color: #666; margin-top: 10px; font-weight: normal; }
 
         .modal { display: none; position: fixed; z-index: 1000; padding-top: 50px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.85); }
@@ -71,26 +57,9 @@
         .close-modal:hover { color: #bbb; text-decoration: none; cursor: pointer; }
         .modal-caption { margin: auto; display: block; width: 80%; text-align: center; color: #ccc; padding: 10px 0; height: 150px; font-size: 1.2em; }
 
-        #toast {
-            visibility: hidden;
-            min-width: 250px;
-            margin-left: -125px;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            border-radius: 4px;
-            padding: 16px;
-            position: fixed;
-            z-index: 1001;
-            left: 50%;
-            bottom: 30px;
-            font-size: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-        #toast.show { visibility: visible; -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
-        @-webkit-keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        #toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 1001; left: 50%; bottom: 30px; font-size: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
         @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @-webkit-keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
         @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
@@ -98,7 +67,7 @@
 
 <div id="loading-overlay">
     <div id="loading-text">資料讀取中...</div>
-    <div id="loading-subtext">若超過 10 秒未回應，請重新整理</div>
+    <div id="loading-subtext">正在連線至資料庫 (ESM Mode)</div>
 </div>
 
 <div id="toast">✅ 資料已自動儲存</div>
@@ -127,9 +96,7 @@
         <select id="view-mode"><option value="month">每月檢視</option></select>
         <input type="month" id="month-picker">
         <button class="btn btn-search" onclick="fetchData()">🔍 查詢紀錄</button>
-        
         <button class="btn btn-download" onclick="handleDownloadOnly()">📥 下載選取照片</button>
-        
         <button id="btn-delete" class="btn btn-delete" onclick="handleDeleteOnly()">🗑️ 刪除選取資料</button>
     </div>
 
@@ -156,54 +123,43 @@
     </div>
 </div>
 
-<script>
-    // 1. 全域錯誤捕捉 (如果有程式語法錯誤，會直接彈窗)
-    window.onerror = function(message, source, lineno, colno, error) {
-        showLoading(false);
-        alert("❌ 程式發生錯誤：\n" + message + "\n(行數: " + lineno + ")");
-        return false;
-    };
+<script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+    // 設定全域變數
     const RAW_URL = 'https://oipnjnwootorawargsxe.supabase.co';
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
-    
-    function cleanString(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
-    
-    // 2. 檢查 Supabase 是否載入成功
-    if (typeof window.supabase === 'undefined') {
-        alert("⛔ 嚴重錯誤：Supabase 函式庫未載入！\n可能被防火牆或擋廣告軟體攔截。\n請檢查網路連線。");
-        document.querySelector('.container').style.opacity = '0.3';
-        document.querySelector('.container').style.pointerEvents = 'none';
-        throw new Error("Supabase Library Missing");
-    }
+    let supabase = null;
 
-    const supabase = window.supabase.createClient(cleanString(RAW_URL), cleanString(RAW_KEY));
-    
+    // 狀態變數
     let currentRecords = []; 
     let isAdmin = false; 
     let currentUserEmail = "";
-    let loadingTimer = null; // 用來計時的變數
-
+    let loadingTimer = null;
     const weekDays = ['(日)', '(一)', '(二)', '(三)', '(四)', '(五)', '(六)'];
 
-    window.onload = function() {
+    // 初始化
+    try {
+        supabase = createClient(RAW_URL, RAW_KEY);
+        console.log("Supabase (ESM) Loaded.");
+        initApp();
+    } catch(e) {
+        showLoading(false);
+        alert("❌ 初始化失敗：您的瀏覽器阻擋了模組載入。\n" + e.message);
+    }
+
+    function initApp() {
         const now = new Date();
         const yyyy = now.getFullYear();
         const mm = String(now.getMonth() + 1).padStart(2, '0');
-        document.getElementById('month-picker').value = `${yyyy}-${mm}`;
+        const picker = document.getElementById('month-picker');
+        if(picker) picker.value = `${yyyy}-${mm}`;
         
-        // 加上 try-catch 防止初始化失敗卡死
-        try {
-            checkSession();
-        } catch(e) {
-            showLoading(false);
-            alert("初始化失敗：" + e.message);
-        }
-    };
+        checkSession();
+    }
 
     async function checkSession() {
         showLoading(true, "驗證身分中...");
-        
         try {
             const { data, error } = await supabase.auth.getSession();
             if (error) throw error;
@@ -217,60 +173,50 @@
             
             currentUserEmail = data.session.user.email;
             await checkUserRole();
-            fetchData(); 
+            await fetchData(); 
             updateGlobalStats(); 
 
         } catch(e) {
             showLoading(false);
-            alert("❌ 身分驗證失敗：" + e.message + "\n請嘗試重新登入。");
+            console.error(e);
+            alert("❌ 身分驗證失敗 (可能因 Supabase 維修中)：\n" + e.message);
         }
     }
 
     async function checkUserRole() {
         try {
             const { data, error } = await supabase.from('user_roles').select('role').eq('email', currentUserEmail).single();
-            // 這裡錯誤不擋流程，只記錄
-            if(error && error.code !== 'PGRST116') console.warn("Role check error:", error);
-
             isAdmin = (data && data.role === 'admin');
-            
-            if (isAdmin) {
-                document.getElementById('btn-delete').style.display = 'inline-block';
-            } else {
-                document.getElementById('btn-delete').style.display = 'none';
-            }
+            const delBtn = document.getElementById('btn-delete');
+            if(delBtn) delBtn.style.display = isAdmin ? 'inline-block' : 'none';
         } catch(e) {
             console.warn("User role check failed:", e);
             isAdmin = false;
         }
     }
 
-    async function fetchData() {
-        showLoading(true, "讀取班表與照片紀錄...");
-        
+    // 將函式掛載到 window，讓 HTML 中的 onclick 可以呼叫
+    window.fetchData = async function() {
+        showLoading(true, "讀取資料中...");
         try {
             const monthVal = document.getElementById('month-picker').value; 
             const [year, month] = monthVal.split('-');
-
             const startDate = `${year}-${month}-01`;
             const lastDay = new Date(year, month, 0).getDate(); 
             const endDate = `${year}-${month}-${lastDay}`;
 
-            // 1. 抓班表
             const { data: scheduleData, error: scheError } = await supabase.from('duty_roster').select('date, staff_name').gte('date', startDate).lte('date', endDate);
-            if (scheError) throw new Error("班表讀取失敗: " + scheError.message);
+            if (scheError) throw new Error("班表失敗: " + scheError.message);
 
-            // 2. 抓紀錄
             const { data: recordData, error: recError } = await supabase.from('meal_records').select('*').gte('record_date', startDate).lte('record_date', endDate);
-            if (recError) throw new Error("照片紀錄讀取失敗: " + recError.message);
+            if (recError) throw new Error("紀錄失敗: " + recError.message);
 
             currentRecords = recordData; 
             renderTable(year, month, scheduleData, recordData);
-        
         } catch (err) {
-            alert("❌ 資料讀取錯誤：\n" + err.message);
+            alert("❌ 讀取錯誤：" + err.message);
         } finally {
-            showLoading(false); // 無論成功失敗，都要關掉遮罩
+            showLoading(false);
         }
     }
 
@@ -307,11 +253,8 @@
                 <tr class="${isWeekend ? 'weekend' : ''}">
                     <td><input type="checkbox" class="date-checkbox" value="${dateStr}"></td>
                     <td class="date-cell">${displayDate}</td> <td>${displayStaffInput}</td> 
-                    
                     <td>${checkStatus('breakfast', 'patient')}</td><td>${checkStatus('breakfast', 'nursing')}</td>
-                    
                     <td>${checkStatus('lunch', 'patient')}</td>
-                    
                     <td>${checkStatus('dinner', 'patient')}</td>
                 </tr>`;
             tbody.innerHTML += row;
@@ -319,187 +262,111 @@
     }
 
     async function updateGlobalStats() {
-        // 這裡不放 showLoading，因為是背景執行
         try {
-            const { count, error } = await supabase
-                .from('meal_records')
-                .select('*', { count: 'exact', head: true });
-
-            if (error) {
-                document.getElementById('total-photos').innerText = "讀取失敗";
-                return;
-            }
-
+            const { count, error } = await supabase.from('meal_records').select('*', { count: 'exact', head: true });
+            if (error) return;
             const totalCount = count || 0;
             const usedSpace = (totalCount * 0.5); 
             const totalSpace = 500; 
-            
             document.getElementById('total-photos').innerText = totalCount + " 張"; 
             document.getElementById('storage-usage').innerText = `${usedSpace.toFixed(1)} MB / ${totalSpace} MB`; 
-            
-            const dailyUsage = 3; 
-            const remainingSpace = totalSpace - usedSpace;
-            const daysLeft = Math.floor(remainingSpace / dailyUsage);
-
+            const daysLeft = Math.floor((totalSpace - usedSpace) / 3);
             const daysLabel = document.getElementById('storage-days');
-            if (daysLeft > 100) {
-                daysLabel.innerHTML = `🌟 空間充足，約還可使用 <strong>${daysLeft}</strong> 天`;
-                daysLabel.style.color = "#ffeb3b"; 
-            } else if (daysLeft > 30) {
-                daysLabel.innerHTML = `⚠️ 空間尚可，約還可使用 <strong>${daysLeft}</strong> 天`;
-                daysLabel.style.color = "#fff"; 
-            } else {
-                daysLabel.innerHTML = `🚨 空間即將不足！約剩 <strong>${daysLeft}</strong> 天`;
-                daysLabel.style.color = "#ff8a80"; 
-            }
-        } catch(e) {
-            console.error("Stats error", e);
-        }
+            if (daysLeft > 100) { daysLabel.innerHTML = `🌟 約可使用 <strong>${daysLeft}</strong> 天`; daysLabel.style.color = "#ffeb3b"; }
+            else { daysLabel.innerHTML = `⚠️ 約剩 <strong>${daysLeft}</strong> 天`; daysLabel.style.color = "#fff"; }
+        } catch(e) { console.error(e); }
     }
 
-    async function updateStaff(date, newName) {
+    window.updateStaff = async function(date, newName) {
         newName = newName.trim();
-        // 這裡不 Show loading，體驗比較好
         try {
-            const { data: existing, error: findError } = await supabase.from('duty_roster').select('*').eq('date', date);
-            if(findError) throw findError;
-
+            const { data: existing } = await supabase.from('duty_roster').select('*').eq('date', date);
             if (existing && existing.length > 0) {
-                if (newName === "") { await supabase.from('duty_roster').delete().eq('date', date); } 
-                else { await supabase.from('duty_roster').update({ staff_name: newName }).eq('date', date); }
-            } else {
-                if (newName !== "") { await supabase.from('duty_roster').insert([{ date: date, staff_name: newName, shift: 'BN' }]); }
+                if (newName === "") await supabase.from('duty_roster').delete().eq('date', date);
+                else await supabase.from('duty_roster').update({ staff_name: newName }).eq('date', date);
+            } else if (newName !== "") {
+                await supabase.from('duty_roster').insert([{ date: date, staff_name: newName, shift: 'BN' }]);
             }
             showToast(`✅ ${date} 更新成功`);
-        } catch (err) { console.error(err); alert("更新失敗: " + err.message); }
+        } catch (err) { alert("更新失敗: " + err.message); }
     }
 
-    function showToast(message) {
-        var x = document.getElementById("toast");
-        x.innerText = message;
-        x.className = "show";
-        setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
-    }
-
-    async function viewPhoto(path, captionText) {
+    window.viewPhoto = async function(path, captionText) {
         showLoading(true, "載入照片中...");
         try {
             const { data, error } = await supabase.storage.from('private_photos').createSignedUrl(path, 60);
             if (error) throw error;
-            const modal = document.getElementById('imageModal');
-            const modalImg = document.getElementById('modalImg');
-            const caption = document.getElementById('caption');
-            modal.style.display = "block";
-            modalImg.src = data.signedUrl;
-            caption.innerText = captionText;
-        } catch (err) { 
-            alert("無法載入照片: " + err.message); 
-        } finally { 
-            showLoading(false); 
-        }
+            document.getElementById('imageModal').style.display = "block";
+            document.getElementById('modalImg').src = data.signedUrl;
+            document.getElementById('caption').innerText = captionText;
+        } catch (err) { alert("無法載入照片: " + err.message); } 
+        finally { showLoading(false); }
     }
-    function closeImageModal() { document.getElementById('imageModal').style.display = "none"; }
 
-    async function handleDownloadOnly() {
+    window.handleDownloadOnly = async function() {
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
         if (checkboxes.length === 0) { alert("請先勾選要下載的日期"); return; }
-        
-        showLoading(true, "正在打包照片...");
-        const selectedDates = Array.from(checkboxes).map(cb => cb.value);
-        const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
-
-        if (targetRecords.length === 0) { alert("選取的日期中沒有照片資料！"); showLoading(false); return; }
-
+        showLoading(true, "打包下載中...");
         try {
+            const selectedDates = Array.from(checkboxes).map(cb => cb.value);
+            const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
+            if (targetRecords.length === 0) { alert("無照片可下載"); return; }
+
             const zip = new JSZip();
-            const folder = zip.folder(`備份_${selectedDates[0]}_to_${selectedDates[selectedDates.length-1]}`);
-            const downloadPromises = targetRecords.map(async (record) => {
+            const folder = zip.folder(`照片備份`);
+            const promises = targetRecords.map(async (record) => {
                 const { data, error } = await supabase.storage.from('private_photos').download(record.photo_path);
                 if (!error && data) {
-                    const filename = `${record.record_date}_${translate(record.meal_type)}_${translate(record.target_type)}.jpg`;
-                    folder.file(filename, data);
+                    const fname = `${record.record_date}_${translate(record.meal_type)}_${translate(record.target_type)}.jpg`;
+                    folder.file(fname, data);
                 }
             });
-            await Promise.all(downloadPromises);
+            await Promise.all(promises);
             const content = await zip.generateAsync({ type: "blob" });
             saveAs(content, `照片備份_${new Date().toISOString().slice(0,10)}.zip`);
-            alert("✅ 照片下載完成！");
-        } catch (err) { console.error(err); alert("下載發生錯誤：" + err.message); } 
+        } catch (err) { alert("下載錯誤: " + err.message); } 
         finally { showLoading(false); }
     }
 
-    async function handleDeleteOnly() {
-        if (!isAdmin) {
-            alert("❌ 權限不足：只有管理員可以刪除資料。");
-            return;
-        }
-
+    window.handleDeleteOnly = async function() {
+        if (!isAdmin) { alert("權限不足"); return; }
         const checkboxes = document.querySelectorAll('.date-checkbox:checked');
-        if (checkboxes.length === 0) { alert("請先勾選要刪除的日期"); return; }
+        if (checkboxes.length === 0) { alert("請勾選日期"); return; }
+        if(!confirm("確定永久刪除？")) return;
+        if(prompt("輸入'刪除'確認") !== "刪除") return;
 
-        if(!confirm(`⚠️ 危險操作警告 ⚠️\n\n您即將「永久刪除」選取日期的所有照片與紀錄。\n刪除後無法復原！\n\n您確定要繼續嗎？`)) return;
-        
-        const confirmInput = prompt(`🔴 最後防護機制 🔴\n\n為了防止誤刪，請在下方對話框輸入 "刪除" 兩個字來確認：\n\n(若輸入錯誤將自動取消)`);
-        
-        if (confirmInput !== "刪除") {
-            alert("❌ 輸入不正確或已取消，刪除操作已中止。");
-            return;
-        }
-
-        showLoading(true, "正在刪除資料...");
-        const selectedDates = Array.from(checkboxes).map(cb => cb.value);
-        const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
-
-        if (targetRecords.length === 0) { 
-            alert("選取的日期中沒有照片資料，無法執行刪除。"); 
-            showLoading(false); 
-            return; 
-        }
-
+        showLoading(true, "刪除中...");
         try {
-            const pathsToRemove = targetRecords.map(r => r.photo_path);
-            if (pathsToRemove.length > 0) {
-                const { error: storageError } = await supabase.storage.from('private_photos').remove(pathsToRemove);
-                if (storageError) throw storageError;
-            }
-
-            const idsToRemove = targetRecords.map(r => r.id);
-            const { error: dbError } = await supabase.from('meal_records').delete().in('id', idsToRemove);
-            if (dbError) throw dbError;
-
-            alert("✅ 刪除成功！選取的紀錄已移除。");
-            fetchData(); 
-            updateGlobalStats(); 
-        } catch (err) { 
-            console.error(err); 
-            alert("刪除發生錯誤：" + err.message); 
-        } 
+            const selectedDates = Array.from(checkboxes).map(cb => cb.value);
+            const targetRecords = currentRecords.filter(r => selectedDates.includes(r.record_date));
+            const paths = targetRecords.map(r => r.photo_path);
+            const ids = targetRecords.map(r => r.id);
+            
+            if(paths.length > 0) await supabase.storage.from('private_photos').remove(paths);
+            await supabase.from('meal_records').delete().in('id', ids);
+            
+            alert("✅ 刪除成功");
+            fetchData();
+            updateGlobalStats();
+        } catch(e) { alert("刪除失敗: " + e.message); }
         finally { showLoading(false); }
     }
 
-    function toggleAll(source) { document.querySelectorAll('.date-checkbox').forEach(cb => cb.checked = source.checked); }
+    window.toggleAll = function(source) { document.querySelectorAll('.date-checkbox').forEach(cb => cb.checked = source.checked); }
+    window.closeImageModal = function() { document.getElementById('imageModal').style.display = "none"; }
     
-    // 🔥 改良後的 showLoading：加入逾時偵測
     function showLoading(show, text) { 
         const overlay = document.getElementById('loading-overlay');
-        const textEl = document.getElementById('loading-text');
-
         if (show) {
             overlay.style.display = 'flex'; 
-            if(text) textEl.innerText = text;
-            
-            // 清除舊的計時器
+            if(text) document.getElementById('loading-text').innerText = text;
             if(loadingTimer) clearTimeout(loadingTimer);
-
-            // 設定 10 秒後如果還沒關掉，就報錯
             loadingTimer = setTimeout(() => {
                 overlay.style.display = 'none';
-                alert("⚠️ 系統回應逾時 (超過 10 秒)！\n\n可能原因：\n1. 網路連線不穩\n2. 資料庫暫時休眠中\n3. 防火牆阻擋\n\n請重新整理網頁再試。");
-            }, 10000); // 10000 毫秒 = 10 秒
-
+                alert("⚠️ 系統回應逾時！\n請檢查網路或 Supabase 狀態。");
+            }, 10000);
         } else {
             overlay.style.display = 'none'; 
-            // 成功載完就取消計時
             if(loadingTimer) clearTimeout(loadingTimer);
         }
     }
