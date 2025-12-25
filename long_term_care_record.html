@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>長照紀錄自動生成系統 (強力修復版)</title>
+    <title>長照紀錄自動生成系統 (V5 終極修復版)</title>
     
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -166,6 +166,7 @@
     const RAW_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
     const SUPABASE_KEY = RAW_KEY.trim();
     
+    // 🌟 這裡使用您的檔名
     const BUCKET_NAME = 'system_files'; 
     const TARGET_FILE_NAME = 'record_template.docx';
 
@@ -280,39 +281,45 @@
     }
 
     // ============================================
-    // Word 生成函數 (V4 強力修復版)
+    // V5 核心：Word 生成 + 自動修復 (Clean XML)
     // ============================================
     async function createWord(buffer, prefix) {
         try {
             const zip = new PizZip(buffer);
             
-            // 🔥🔥🔥 核心：強力清理 Word XML 🔥🔥🔥
+            // 🔥🔥🔥 強力 XML 清洗區 🔥🔥🔥
             try {
                 const xmlFile = "word/document.xml";
                 if(zip.files[xmlFile]) {
                     let xml = zip.files[xmlFile].asText();
                     
-                    // 1. 刪除拼字檢查標籤 (最常見的斷裂原因)
+                    // 1. 移除 Word 拼字檢查標籤 (最常見的干擾源)
                     xml = xml.replace(/<w:proofErr[^>]*\/>/g, "");
                     xml = xml.replace(/<w:gramE[^>]*\/>/g, "");
                     xml = xml.replace(/<w:lang[^>]*\/>/g, "");
-
-                    // 2. 解決 "Duplicate open tags"：合併相鄰或被標籤隔開的重複 {{
-                    //    將 {{...xml...{{ 替換為單一個 {{
-                    xml = xml.replace(/({{)(?:<[^>]+>)*\1/g, "{{");
                     
-                    // 3. 解決 "Duplicate close tags"：合併重複的 }}
-                    xml = xml.replace(/(}})(?:<[^>]+>)*\1/g, "}}");
+                    // 2. 移除重複的開始標籤 (Duplicate Open Tags)
+                    // 例如：把 {{user{{_name}} 修復為 {{user_name}}
+                    // 原理：只要 {{ 後面還有 {{，就刪掉後面那個
+                    let prevXml = "";
+                    while (xml !== prevXml) {
+                        prevXml = xml;
+                        xml = xml.replace(/({{[^{}]*){{/g, "$1");
+                    }
 
-                    // 4. 最後一招：如果還有殘留的 {{，再強制合併一次
-                    xml = xml.replace(/{{2,}/g, "{{");
-                    xml = xml.replace(/}}{2,}/g, "}}");
+                    // 3. 移除重複的結束標籤 (Duplicate Close Tags)
+                    // 例如：把 {{user_name}} }} 修復為 {{user_name}}
+                    prevXml = "";
+                    while (xml !== prevXml) {
+                        prevXml = xml;
+                        xml = xml.replace(/(}}[^}{]*?)}}/g, "$1");
+                    }
 
                     zip.file(xmlFile, xml);
-                    console.log("🔥 XML 強力清洗完成");
+                    console.log("🔥 XML 自動修復完成");
                 }
             } catch(e) {
-                console.warn("清洗失敗，嘗試直接生成", e);
+                console.warn("自動修復程序異常 (不影響主流程)", e);
             }
             // ------------------------------------
 
@@ -358,7 +365,6 @@
                 const errorMessages = error.properties.errors.map(function(err) {
                     return err.properties.explanation;
                 }).join("\n");
-                // 如果連強力修復都失敗，那這檔案真的太神了，但通常這步就能解決
                 alert("⚠️ 自動修復失敗，Word 格式損壞太嚴重：\n" + errorMessages);
             } else {
                 alert("❌ 生成失敗: " + error.message);
@@ -366,6 +372,9 @@
         }
     }
 
+    // ============================================
+    // PDF 解析邏輯
+    // ============================================
     function cleanTextDeep(text) {
         return text.replace(/[\n\r]/g, "") 
                    .replace(/※/g, "")
