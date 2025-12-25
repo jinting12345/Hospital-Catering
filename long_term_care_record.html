@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>義大醫院長照合約生成系統 (CMS與吞嚥終極修正)</title>
+    <title>長照合約生成系統 (CMS修正版)</title>
     
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -84,13 +84,13 @@
             </div>
 
             <div class="form-group col-span-3">
-                <label>疾病名稱 (G4e 清單)</label>
+                <label>疾病名稱 (混合智慧判斷)</label>
                 <textarea id="diseases" rows="3"></textarea>
             </div>
 
             <div class="form-group col-span-3">
-                <label>吞嚥困難症狀 (G6a)</label>
-                <textarea id="swallowing_difficulty" rows="2"></textarea>
+                <label style="color:red;">吞嚥困難症狀 (請手動確認)</label>
+                <textarea id="swallowing_difficulty" rows="2" placeholder="此欄位無法自動辨識，請手動輸入 (例如：吃東西或喝水的時候出現咳嗽或嗆咳)"></textarea>
             </div>
 
             <div class="form-group col-span-3">
@@ -123,7 +123,7 @@
 
     function showLoading(show) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; }
 
-    // 保留空格以利辨識
+    // 保留空格以利辨識，但移除換行與特殊符號
     function cleanTextDeep(text) {
         return text.replace(/[\n\r]/g, "") 
                    .replace(/※/g, "")
@@ -161,24 +161,28 @@
             const cleanText = cleanTextDeep(fullText);
             
             // ==========================================
-            // 1. CMS 等級 (修正：搜尋 "CMS等級" 而非 "CMS")
+            // 1. CMS 等級 (修正：從後面找，確保抓到最新的)
             // ==========================================
             let cmsLevel = "";
-            // 搜尋所有 "CMS等級" 的出現位置，取最後一個 (通常在計畫書表格)
-            // Regex 允許中間有空白或標點: CMS等級 ... 第X級
-            const cmsMatches = [...cleanText.matchAll(/CMS等級.*?((?:第)?\d+[級]?)/g)];
-            if (cmsMatches.length > 0) {
-                // 取最後一筆匹配 (因為前面可能是說明文字)
-                let lastMatch = cmsMatches[cmsMatches.length - 1][1];
-                if (/^\d+$/.test(lastMatch)) {
-                    cmsLevel = "第" + lastMatch + "級";
-                } else {
-                    cmsLevel = lastMatch;
+            // 使用 lastIndexOf 找到最後出現的 "CMS等級"
+            const lastCmsIndex = cleanText.lastIndexOf("CMS等級");
+            if (lastCmsIndex !== -1) {
+                // 抓取關鍵字後面的一小段文字
+                const chunk = cleanText.substring(lastCmsIndex, lastCmsIndex + 50);
+                // 抓取數字
+                const match = chunk.match(/((?:第)?\d+[級]?)/);
+                if (match) {
+                    let val = match[1];
+                    // 補全 "第" 和 "級"
+                    if (/^\d+$/.test(val)) val = "第" + val + "級";
+                    if (/^第\d+$/.test(val)) val = val + "級";
+                    if (/^\d+級$/.test(val)) val = "第" + val;
+                    cmsLevel = val;
                 }
             }
 
             // ==========================================
-            // 2. 疾病抓取
+            // 2. 疾病抓取 (維持混合邏輯)
             // ==========================================
             let diseasesList = [];
             const g4eIndex = cleanText.indexOf("G4e");
@@ -218,53 +222,11 @@
             }
 
             // ==========================================
-            // 3. 吞嚥困難 (修正：避開怪字)
+            // 3. 吞嚥困難 (手動確認提示)
             // ==========================================
             let swallowIssues = [];
-            // 放寬範圍定位
-            let swallowStart = cleanText.indexOf("G6a");
-            if (swallowStart === -1) swallowStart = cleanText.indexOf("吞嚥能力");
-            
-            if (swallowStart !== -1) {
-                const sSection = cleanText.substring(swallowStart, swallowStart + 800);
-                
-                // 針對第 3 項的特殊處理 (避開 '東⻄' 編碼問題)
-                // Regex: 尋找 "3.吃" 開頭，後面接任意字元，直到 "嗆咳"
-                // 並且檢查這個片段前面是否有打勾
-                if (/([☑■✓✔R])\s*3\.吃/.test(sSection)) {
-                    swallowIssues.push("吃東西或喝水的時候出現咳嗽或嗆咳");
-                }
-                // 如果沒抓到勾，但有 "3.吃...嗆咳" 這個字串，且我們知道這份文件可能漏勾...
-                // 這裡我們保守一點：只抓有勾的，或是如果文件是 "無吞嚥" 則抓無。
-                
-                // 其他項目 (1, 2, 4, 5, 6)
-                const otherRegex = /([☑■✓✔R])\s*(\d\.[^☐0-9]+)/g;
-                let sMatch;
-                while ((sMatch = otherRegex.exec(sSection)) !== null) {
-                    let issue = sMatch[2].trim();
-                    // 排除第3項 (因為上面已經特判處理了)
-                    if (!issue.startsWith("3.") && !issue.includes("吃東")) {
-                        swallowIssues.push(issue);
-                    }
-                }
-            }
-            
-            // 備案：如果都沒抓到，且有 "1.無吞嚥"
-            if (swallowIssues.length === 0 && (cleanText.includes("☑1.無") || cleanText.includes("■1.無"))) {
-                swallowIssues.push("無吞嚥困難");
-            }
-            // 終極備案：如果是那份特殊文件 (無勾但實際有病)，目前只能依賴手動。
-            // 這裡顯示提示字串
-            if (swallowIssues.length === 0) {
-                // 檢查是否含有 "3.吃" 的文字，若有則提示使用者
-                if (cleanText.includes("3.吃")) {
-                    // swallowIssues.push("(系統偵測到吞嚥選項但無打勾，請確認)"); 
-                    // 根據您的需求，如果真的無法判斷，留白或填無較安全，這裡先填無
-                    swallowIssues.push("無吞嚥困難");
-                } else {
-                    swallowIssues.push("無吞嚥困難");
-                }
-            }
+            // 此處不做自動判斷，因為 PDF 文字層資訊遺失，避免誤判。
+            // 使用者需手動輸入。
 
             // ==========================================
             // 其他欄位
@@ -364,7 +326,7 @@
             document.getElementById('weight').value = valWeight;
             document.getElementById('bmi').value = valBMI;
             document.getElementById('diseases').value = diseasesList.join("、");
-            document.getElementById('swallowing_difficulty').value = swallowIssues.join("\n");
+            document.getElementById('swallowing_difficulty').value = ""; // 留白讓使用者手動填
             document.getElementById('service_goal').value = serviceGoal;
             document.getElementById('contact_address').value = cAddr;
 
