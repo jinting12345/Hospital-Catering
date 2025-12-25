@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>長照紀錄自動生成系統 (含自動修復功能)</title>
+    <title>長照紀錄自動生成系統 (強力修復版)</title>
     
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -22,37 +22,29 @@
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; background-color: #f5f7fa; color: #333; }
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .back-link { text-decoration: none; color: #666; font-weight: bold; font-size: 1.1em; display: flex; align-items: center; gap: 5px; cursor: pointer; transition: color 0.2s; }
         .back-link:hover { color: #333; }
         .logout-btn { background-color: #dc3545; color: white; border: none; padding: 8px 20px; border-radius: 4px; font-size: 1em; font-weight: bold; cursor: pointer; transition: background 0.2s; }
-        
         .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #edf2f7; padding-bottom: 20px; }
         .header h1 { color: #2c3e50; margin: 0; font-size: 2em; }
-        
         .step-section { margin-bottom: 30px; }
         .step-header { display: flex; align-items: center; margin-bottom: 15px; }
         .step-number { background: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; }
         .step-title { font-weight: bold; font-size: 1.2em; color: #2c3e50; }
-
         .upload-box { border: 2px dashed #cbd5e0; border-radius: 8px; padding: 30px; text-align: center; background: #f8fafc; transition: 0.3s; }
         .upload-box:hover { border-color: #3498db; background: #ebf8ff; }
-
         .grid-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; background: #fff; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
         .form-group label { display: block; font-weight: bold; margin-bottom: 5px; color: #4a5568; font-size: 0.9em; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px; box-sizing: border-box; background-color: #fdfdfd; }
         .col-span-2 { grid-column: span 2; }
         .col-span-3 { grid-column: span 3; }
-
         .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; color: white; margin-top: 15px; }
         .btn-parse { background-color: #3498db; }
         .btn-generate { background-color: #27ae60; }
         .btn:disabled { background-color: #a0aec0; cursor: not-allowed; }
-
         #login-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center; }
         .login-box { background: white; padding: 30px; border-radius: 10px; width: 300px; text-align: center; }
-
         #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 10000; flex-direction: column; }
         #loading-text { font-size: 1.5em; color: #3498db; font-weight: bold; margin-bottom: 10px; }
     </style>
@@ -288,30 +280,39 @@
     }
 
     // ============================================
-    // Word 生成函數 (含自動修復功能)
+    // Word 生成函數 (V4 強力修復版)
     // ============================================
     async function createWord(buffer, prefix) {
         try {
             const zip = new PizZip(buffer);
             
-            // 🛠️ 懶人救星：自動修復 Word XML 🛠️
-            // 這段代碼會把 Word 裡的 {{...}} 清洗乾淨，解決 "Multi error" / "Duplicate open tags"
+            // 🔥🔥🔥 核心：強力清理 Word XML 🔥🔥🔥
             try {
                 const xmlFile = "word/document.xml";
                 if(zip.files[xmlFile]) {
                     let xml = zip.files[xmlFile].asText();
                     
-                    // 1. 移除標籤內的 XML 樣式 (例如 {{<font>user</font>}} -> {{user}})
-                    xml = xml.replace(/({{[^}]*}})/g, (m) => m.replace(/<[^>]+>/g, ""));
+                    // 1. 刪除拼字檢查標籤 (最常見的斷裂原因)
+                    xml = xml.replace(/<w:proofErr[^>]*\/>/g, "");
+                    xml = xml.replace(/<w:gramE[^>]*\/>/g, "");
+                    xml = xml.replace(/<w:lang[^>]*\/>/g, "");
+
+                    // 2. 解決 "Duplicate open tags"：合併相鄰或被標籤隔開的重複 {{
+                    //    將 {{...xml...{{ 替換為單一個 {{
+                    xml = xml.replace(/({{)(?:<[^>]+>)*\1/g, "{{");
                     
-                    // 2. 移除多餘的重複括號 (例如 {{{{user}}}} -> {{user}})
-                    xml = xml.replace(/{{2,}/g, "{{").replace(/}}{2,}/g, "}}");
-                    
+                    // 3. 解決 "Duplicate close tags"：合併重複的 }}
+                    xml = xml.replace(/(}})(?:<[^>]+>)*\1/g, "}}");
+
+                    // 4. 最後一招：如果還有殘留的 {{，再強制合併一次
+                    xml = xml.replace(/{{2,}/g, "{{");
+                    xml = xml.replace(/}}{2,}/g, "}}");
+
                     zip.file(xmlFile, xml);
-                    console.log("已自動執行 Word 標籤修復程序");
+                    console.log("🔥 XML 強力清洗完成");
                 }
             } catch(e) {
-                console.warn("自動修復略過", e);
+                console.warn("清洗失敗，嘗試直接生成", e);
             }
             // ------------------------------------
 
@@ -357,16 +358,14 @@
                 const errorMessages = error.properties.errors.map(function(err) {
                     return err.properties.explanation;
                 }).join("\n");
-                alert("⚠️ 自動修復後仍有錯誤 (Word檔太亂了)：\n" + errorMessages);
+                // 如果連強力修復都失敗，那這檔案真的太神了，但通常這步就能解決
+                alert("⚠️ 自動修復失敗，Word 格式損壞太嚴重：\n" + errorMessages);
             } else {
                 alert("❌ 生成失敗: " + error.message);
             }
         }
     }
 
-    // ============================================
-    // PDF 解析邏輯
-    // ============================================
     function cleanTextDeep(text) {
         return text.replace(/[\n\r]/g, "") 
                    .replace(/※/g, "")
@@ -403,7 +402,6 @@
             fullText = fullText.normalize('NFKC');
             const cleanText = cleanTextDeep(fullText);
             
-            // 1. 基本資料
             let userName = "", userId = "";
             const headerMatch = cleanText.match(/姓名\/身分證字號[:：]?\s*([^\/]+)\/([A-Z][0-9]{9})/);
             if (headerMatch) { userName = headerMatch[1].trim(); userId = headerMatch[2]; }
@@ -414,7 +412,6 @@
             const genderMatch = cleanText.match(/性別[:：]?\s*([男女])/);
             if (genderMatch) gender = genderMatch[1];
 
-            // 2. 代理人與電話
             let phoneNum = "", phoneType = "個案本人", contractorName = userName, agentRelation = "";
             const agentNameMatch = cleanText.match(/代理人姓名[:：]?\s*([^\s:：,，"\[\]]+)/);
             
@@ -437,7 +434,6 @@
                 if (userPhoneMatch) phoneNum = userPhoneMatch[1];
             }
 
-            // 3. CMS
             let cmsLevel = "";
             const lastCmsIndex = cleanText.lastIndexOf("CMS等級");
             if (lastCmsIndex !== -1) {
@@ -446,7 +442,6 @@
                 if (match) cmsLevel = "第" + match[1] + "級";
             }
 
-            // 4. 疾病
             let diseasesList = [];
             const g4eIndex = cleanText.indexOf("G4e");
             const endG4e = cleanText.indexOf("G4f");
@@ -481,7 +476,6 @@
                 }
             }
 
-            // 5. 體位與其他
             let valHeight = "", valWeight = "", valBMI = "";
             const hMatch = cleanText.match(/身高[:：]?\s*(\d+(\.\d+)?)公分/);
             if (hMatch) valHeight = hMatch[1];
@@ -516,7 +510,6 @@
                 if (idxHouse !== -1) cAddr = extractAddressFromChunk(cleanText.substring(idxHouse, idxHouse + 200));
             }
 
-            // 填入 UI
             document.getElementById('user_name').value = userName;
             document.getElementById('user_id').value = userId;
             document.getElementById('phone_number').value = phoneNum;
