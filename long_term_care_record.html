@@ -40,8 +40,17 @@
         .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; margin-top: 10px; transition: 0.2s; }
         .btn-parse { background-color: #3498db; }
         .btn-generate { background-color: #27ae60; }
+        .btn-manual { background-color: #e67e22; }
         .btn:hover { opacity: 0.9; }
         .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* 模式切換區 */
+        .mode-switch { display: flex; gap: 20px; margin-bottom: 15px; padding-left: 10px; }
+        .mode-switch label { cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: bold; color: #555; }
+        .mode-switch input[type="radio"] { width: auto; margin: 0; }
+        
+        .auto-box { border-color: #27ae60; background: #f0fdf4; border-style: dashed; }
+        .manual-box { border-color: #e67e22; background: #fffaf0; border-style: dashed; display: none; }
 
         /* 狀態標籤 */
         .status-badge { display: inline-block; padding: 5px 10px; border-radius: 20px; font-size: 0.85em; margin-left: 10px; }
@@ -94,7 +103,9 @@
             <div class="form-group"><label>主要聯絡人</label><input type="text" id="contractor_name"></div>
             <div class="form-group"><label>聯絡電話</label><input type="text" id="phone_number"></div>
             <div class="form-group"><label>關係</label><input type="text" id="agent_relation"></div>
-            <input type="hidden" id="phone_type"> <div class="form-group col-span-3">
+            <input type="hidden" id="phone_type"> 
+
+            <div class="form-group col-span-3">
                 <label>居住/通訊地址</label>
                 <input type="text" id="contact_address">
             </div>
@@ -112,19 +123,37 @@
     </div>
 
     <div class="step-section">
-        <div class="step-title">
-            步驟 3: 生成長照紀錄 Word
-            <span id="templateStatus" class="status-badge status-loading">連接中...</span>
+        <div class="step-title">步驟 3: 生成長照紀錄 Word</div>
+        
+        <div class="mode-switch">
+            <label>
+                <input type="radio" name="mode" value="auto" checked onchange="toggleMode()">
+                🔒 自動模式 (使用系統範本)
+            </label>
+            <label>
+                <input type="radio" name="mode" value="manual" onchange="toggleMode()">
+                📤 手動上傳模式
+            </label>
         </div>
-        <div class="upload-box" style="border-color: #27ae60; background: #f0fdf4;">
-            <p id="templateMsg">正在從雲端載入模板...</p>
-            <button id="btnGenerate" class="btn btn-generate" onclick="generateRecord()" disabled>📄 立即下載長照紀錄表</button>
+
+        <div id="auto-section" class="upload-box auto-box">
+            <p>
+                狀態：<span id="templateStatus" class="status-badge status-loading">連接中...</span>
+            </p>
+            <p id="templateMsg" style="font-size: 0.9em; color: #666;">正在從雲端載入模板...</p>
+            <button id="btnGenerate" class="btn btn-generate" onclick="generateRecordAuto()" disabled>📄 下載紀錄表 (自動模式)</button>
+        </div>
+
+        <div id="manual-section" class="upload-box manual-box">
+            <p>請上傳您電腦中的 Word 範本 (.docx)</p>
+            <input type="file" id="manual_template_upload" accept=".docx" />
+            <button class="btn btn-manual" onclick="generateRecordManual()">📄 下載紀錄表 (手動模式)</button>
         </div>
     </div>
 
     <div class="admin-section">
         <details>
-            <summary>⚙️ 模板管理 (若需更新模板請點此)</summary>
+            <summary>⚙️ 模板管理 (若需更新系統預設模板請點此)</summary>
             <div style="margin-top: 15px; padding: 15px; border: 1px dashed #ccc; background: #fafafa;">
                 <p>上傳新的 <b>Word 模板 (.docx)</b> 將會覆蓋雲端上的舊檔案。</p>
                 <input type="file" id="new_template_upload" accept=".docx">
@@ -138,8 +167,10 @@
     // 設定 Supabase
     const SUPABASE_URL = 'https://oipnjnwootorawargsxe.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_3KbpnkaYl5CxJufjrLKlAQ_0-nzCIII';
-    const BUCKET_NAME = 'system_files'; // 假設您之前的合約模板放在這裡
-    const TEMPLATE_NAME = 'record_template.docx'; // 這是這個新功能專用的模板檔名
+    
+    // 🌟 修正點 1: 根據你的截圖，檔案在 templates 資料夾內
+    const BUCKET_NAME = 'system_files'; 
+    const TEMPLATE_PATH = 'templates/record_template.docx'; // 包含資料夾路徑
 
     let supabase = null;
     let globalTemplateBuffer = null; // 儲存下載下來的模板
@@ -157,6 +188,18 @@
         }
     };
 
+    // 切換模式顯示
+    window.toggleMode = function() {
+        const mode = document.querySelector('input[name="mode"]:checked').value;
+        if(mode === 'auto') {
+            document.getElementById('auto-section').style.display = 'block';
+            document.getElementById('manual-section').style.display = 'none';
+        } else {
+            document.getElementById('auto-section').style.display = 'none';
+            document.getElementById('manual-section').style.display = 'block';
+        }
+    }
+
     // ===========================
     // 雲端模板功能
     // ===========================
@@ -167,27 +210,28 @@
         try {
             const { data, error } = await supabase.storage
                 .from(BUCKET_NAME)
-                .download(TEMPLATE_NAME);
+                .download(TEMPLATE_PATH); // 使用修正後的路徑
 
             if (error) {
+                console.error("Supabase Error:", error);
                 if(error.message.includes("Object not found")) {
-                    updateStatus('error', '找不到模板，請在下方「模板管理」上傳');
+                    updateStatus('error', `找不到模板 (路徑: ${TEMPLATE_PATH})`);
                 } else {
-                    throw error;
+                    updateStatus('error', '連線錯誤: ' + error.message);
                 }
             } else {
                 globalTemplateBuffer = await data.arrayBuffer();
-                updateStatus('ready', '模板準備就緒 (record_template.docx)');
+                updateStatus('ready', '系統模板已準備就緒');
                 document.getElementById('btnGenerate').disabled = false;
                 document.getElementById('templateMsg').innerText = "✅ 雲端模板已載入，可直接生成。";
             }
         } catch (err) {
             console.error(err);
-            updateStatus('error', '模板載入失敗: ' + err.message);
+            updateStatus('error', '載入失敗: ' + err.message);
         }
     }
 
-    // 2. 上傳新模板到 Supabase
+    // 2. 上傳新模板到 Supabase (更新系統模板)
     async function uploadNewTemplate() {
         const fileInput = document.getElementById('new_template_upload');
         if (fileInput.files.length === 0) { alert("請先選擇一個 .docx 檔案"); return; }
@@ -199,7 +243,7 @@
             // 上傳並覆蓋 (upsert: true)
             const { data, error } = await supabase.storage
                 .from(BUCKET_NAME)
-                .upload(TEMPLATE_NAME, file, {
+                .upload(TEMPLATE_PATH, file, { // 使用修正後的路徑
                     cacheControl: '3600',
                     upsert: true
                 });
@@ -226,10 +270,83 @@
     }
 
     // ===========================
-    // V14 解析邏輯 (核心功能)
+    // 資料收集與 Word 生成
+    // ===========================
+
+    function getTemplateData() {
+        return {
+            user_name: document.getElementById('user_name').value,
+            user_id: document.getElementById('user_id').value,
+            payment_display: document.getElementById('payment_display').value,
+            gender: document.getElementById('gender').value,
+            birth_date: document.getElementById('birth_date').value,
+            cms_level: document.getElementById('cms_level').value,
+            phone_number: document.getElementById('phone_number').value,
+            phone_type: document.getElementById('phone_type').value,
+            contractor_name: document.getElementById('contractor_name').value,
+            agent_relation: document.getElementById('agent_relation').value,
+            height: document.getElementById('height').value,
+            weight: document.getElementById('weight').value,
+            bmi: document.getElementById('bmi').value,
+            contact_address: document.getElementById('contact_address').value,
+            diseases: document.getElementById('diseases').value,
+            service_goal: document.getElementById('service_goal').value,
+            today: new Date().toLocaleDateString('zh-TW')
+        };
+    }
+
+    // 自動模式生成
+    async function generateRecordAuto() {
+        if (!globalTemplateBuffer) { alert("模板尚未載入"); return; }
+        await createWord(globalTemplateBuffer, "長照紀錄_自動");
+    }
+
+    // 手動模式生成
+    async function generateRecordManual() {
+        const fileInput = document.getElementById('manual_template_upload');
+        if (fileInput.files.length === 0) { alert("請先選擇 Word 檔案"); return; }
+        
+        try {
+            const arrayBuffer = await fileInput.files[0].arrayBuffer();
+            await createWord(arrayBuffer, "長照紀錄_手動");
+        } catch(e) {
+            alert("讀取檔案失敗: " + e.message);
+        }
+    }
+
+    // 通用 Word 產出函式
+    async function createWord(buffer, prefix) {
+        showLoading(true);
+        try {
+            const zip = new PizZip(buffer);
+            const doc = new window.docxtemplater(zip, { 
+                paragraphLoop: true, 
+                linebreaks: true,
+                nullGetter: () => ""
+            });
+
+            const templateData = getTemplateData();
+            doc.setData(templateData);
+            doc.render();
+
+            const blob = doc.getZip().generate({
+                type: "blob",
+                mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            });
+
+            saveAs(blob, `${prefix}_${templateData.user_name}.docx`);
+        } catch (error) {
+            alert("Word 生成錯誤: " + JSON.stringify(error));
+            console.error(error);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // ===========================
+    // V14 解析邏輯 (保留原樣)
     // ===========================
     
-    // 括號清理
     function cleanTextDeep(text) {
         return text.replace(/[\n\r]/g, "") 
                    .replace(/※/g, "")
@@ -237,7 +354,6 @@
                    .replace(/[（]/g, "(").replace(/[）]/g, ")");
     }
 
-    // 地址擷取
     function extractAddressFromChunk(chunk) {
         const regex = /(.{2,4}[縣市].*?(?:號|樓)(?:[\d之-]*[樓Ff])?)/;
         const match = chunk.match(regex);
@@ -245,7 +361,6 @@
         return "";
     }
 
-    // PDF 解析主程式
     async function parsePDF() {
         if (typeof pdfjsLib === 'undefined') { alert("PDF 元件載入中"); return; }
         const fileInput = document.getElementById('pdf_upload');
@@ -405,59 +520,6 @@
             showLoading(false);
             console.error(err);
             alert("解析錯誤: " + err.message);
-        }
-    }
-
-    // ===========================
-    // Word 生成 (使用雲端 Buffer)
-    // ===========================
-    async function generateRecord() {
-        if (!globalTemplateBuffer) { alert("模板尚未載入"); return; }
-        
-        showLoading(true);
-        try {
-            const zip = new PizZip(globalTemplateBuffer);
-            const doc = new window.docxtemplater(zip, { 
-                paragraphLoop: true, 
-                linebreaks: true,
-                nullGetter: () => ""
-            });
-
-            const templateData = {
-                user_name: document.getElementById('user_name').value,
-                user_id: document.getElementById('user_id').value,
-                payment_display: document.getElementById('payment_display').value,
-                gender: document.getElementById('gender').value,
-                birth_date: document.getElementById('birth_date').value,
-                cms_level: document.getElementById('cms_level').value,
-                phone_number: document.getElementById('phone_number').value,
-                phone_type: document.getElementById('phone_type').value,
-                contractor_name: document.getElementById('contractor_name').value,
-                agent_relation: document.getElementById('agent_relation').value,
-                height: document.getElementById('height').value,
-                weight: document.getElementById('weight').value,
-                bmi: document.getElementById('bmi').value,
-                contact_address: document.getElementById('contact_address').value,
-                diseases: document.getElementById('diseases').value,
-                service_goal: document.getElementById('service_goal').value,
-                // 額外欄位：您可以在這裡加入自動產生今天的日期
-                today: new Date().toLocaleDateString('zh-TW')
-            };
-
-            doc.setData(templateData);
-            doc.render();
-
-            const blob = doc.getZip().generate({
-                type: "blob",
-                mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            });
-
-            saveAs(blob, `長照紀錄_${templateData.user_name}.docx`);
-        } catch (error) {
-            alert("Word 生成錯誤: " + JSON.stringify(error));
-            console.error(error);
-        } finally {
-            showLoading(false);
         }
     }
 </script>
